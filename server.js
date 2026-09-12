@@ -78,7 +78,7 @@ app.post('/api/register',upload.fields([{name:'participantPhoto',maxCount:1},{na
     const registrationId=`BSF26-${Date.now().toString().slice(-7)}-${Math.floor(100+Math.random()*900)}`;
     const ticketToken=uuidv4();
     await withTransaction(async cdb=>{
-      await cdb.query(`INSERT INTO registrations(registration_id,ticket_token,idempotency_key,full_name,school_name,gender,dob,age_category,phone,email,guardian_name,events_json,amount,participant_photo,participant_photo_mime,payment_proof,payment_proof_mime,payment_utr) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,[registrationId,ticketToken,b.idempotencyKey,b.fullName.trim(),b.schoolName.trim(),b.gender,b.dob,c.name,b.phone.trim(),b.email?.trim()||null,b.guardianName?.trim()||null,events,amount,photo.buffer,photo.mimetype,proof.buffer,proof.mimetype,b.paymentUtr?.trim()||null]);
+      await cdb.query(`INSERT INTO registrations(registration_id,ticket_token,idempotency_key,full_name,school_name,gender,dob,age_category,phone,email,guardian_name,JSON.stringify(events),amount,participant_photo,participant_photo_mime,payment_proof,payment_proof_mime,payment_utr) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,[registrationId,ticketToken,b.idempotencyKey,b.fullName.trim(),b.schoolName.trim(),b.gender,b.dob,c.name,b.phone.trim(),b.email?.trim()||null,b.guardianName?.trim()||null,events,amount,photo.buffer,photo.mimetype,proof.buffer,proof.mimetype,b.paymentUtr?.trim()||null]);
       await cdb.query('INSERT INTO whatsapp_queue(registration_id,phone,message_type,payload_json) VALUES($1,$2,$3,$4)',[registrationId,b.phone.trim(),'ticket',{registrationId,ticketToken}]);
     });
     res.json({ok:true,registrationId,ticketToken,amount});
