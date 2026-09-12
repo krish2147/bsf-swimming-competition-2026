@@ -1,0 +1,12 @@
+node_modules/
+.env
+uploads/
+
+competition.db
+competition.db-shm
+competition.db-wal
+*.db
+*.db-shm
+*.db-wal
+
+.DS_Store
