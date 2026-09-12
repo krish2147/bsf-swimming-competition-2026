@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Competition Registration</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body class="registration-page">
+<a class="skip-link" href="#main">Skip to content</a>
+<nav aria-label="Main navigation"><a class="brand" href="/" aria-label="AARK and BSF home"><span class="brand-mark" aria-hidden="true">≈</span>AARK × BSF <small> / SWIMMING</small></a><a href="/results.html">Results</a><a href="/timings.html">Timings</a><a class="nav-cta" href="/register.html" aria-current="page">Register now ↗</a></nav>
+
+<main id="main" class="registration-shell">
+  <section class="registration-hero">
+    <div class="eyebrow">3rd Inter-School Swimming Competition 2026</div>
+    <h1>A great race starts here.</h1>
+    <p>Register your swimmer in three simple steps. Add their details, choose their events, and upload payment proof.</p>
+  </section>
+
+  <div class="registration-layout"><div class="registration-form-card">
+    <form id="form">
+      <section class="registration-section">
+        <div class="section-heading">
+          <div class="section-index">01</div>
+          <div><h2>Participant Details</h2><p>Swimmer and parent contact information</p></div>
+        </div>
+        <div class="grid">
+          <div><label for="fullName">Swimmer full name</label><input id="fullName" name="fullName" placeholder="Enter swimmer name" required></div>
+          <div><label for="schoolName">School name</label><input id="schoolName" name="schoolName" placeholder="Enter school name" required></div>
+          <div><label for="gender">Gender</label><select id="gender" name="gender" required><option value="">Select gender</option><option>Boys</option><option>Girls</option></select></div>
+          <div><label for="dobInput">Date of birth</label><div class="date-input-wrap"><input id="dobInput" name="dob" type="date" required><button class="date-picker-btn" type="button" aria-label="Open calendar" onclick="openDobPicker()"><svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="16" rx="2"></rect><path d="M16 3v4M8 3v4M3 10h18"></path></svg></button></div></div>
+          <div><label for="phone">Parent / contact phone</label><input id="phone" name="phone" type="tel" autocomplete="tel" inputmode="tel" placeholder="Enter mobile number" required></div>
+          <div><label for="email">Email <span class="optional">(optional)</span></label><input id="email" name="email" autocomplete="email" type="email" placeholder="Enter email address"></div>
+          <div><label for="guardianName">Guardian name <span class="optional">(optional)</span></label><input id="guardianName" name="guardianName" placeholder="Enter guardian name"></div>
+          <div><label for="participantPhoto">Participant photo</label><input id="participantPhoto" name="participantPhoto" type="file" accept="image/*" required></div>
+        </div>
+      </section>
+
+      <section class="registration-section">
+        <div class="section-heading">
+          <div class="section-index">02</div>
+          <div><h2>Category & Events</h2><p>Events are shown automatically according to date of birth</p></div>
+        </div>
+        <div id="categoryBox" class="notice" aria-live="polite">Select date of birth to view the eligible category.</div>
+        <div id="eventsBox"></div>
+      </section>
+
+      <section class="registration-section">
+        <div class="section-heading">
+          <div class="section-index">03</div>
+          <div><h2>Payment</h2><p>Scan, pay the exact amount and upload the payment screenshot</p></div>
+        </div>
+        <div class="payment-card">
+          <div class="grid">
+            <div style="display:grid;place-items:center"><img id="payQr" class="qr" alt="Payment QR"></div>
+            <div class="payment-summary">
+              <div class="total-label">Amount to pay</div>
+              <div class="total-amount" id="amount" aria-live="polite">₹0</div>
+              <div><strong id="payee"></strong></div>
+              <div class="muted" id="upi"></div>
+            </div>
+          </div>
+          <div class="grid" style="margin-top:18px">
+            <div><label for="paymentProof">Payment screenshot</label><input id="paymentProof" name="paymentProof" type="file" accept="image/*" required></div>
+            <div><label for="paymentUtr">Transaction ID / UTR <span style="font-weight:500;opacity:.65">(optional)</span></label><input id="paymentUtr" name="paymentUtr" placeholder="Enter transaction ID"></div>
+          </div>
+        </div>
+      </section>
+
+      <button id="submitBtn">Complete Registration</button>
+      <p id="status" role="status" aria-live="polite"></p>
+    </form>
+  </div>
+<aside class="registration-aside" aria-label="Meet information"><div class="eyebrow">Your race-day essentials</div><h3>See you at the pool.</h3><div class="aside-detail"><span>When & where</span><strong>4 October 2026 · Vadodara</strong></div><div class="aside-detail"><span>Individual events</span><strong>₹300 per event · Maximum 4</strong></div><div class="aside-detail"><span>Relay entry</span><strong>₹800 per relay</strong></div><div class="aside-detail"><span>Before you begin</span><ul><li>Swimmer’s date of birth</li><li>Participant photo (up to 6 MB)</li><li>Payment screenshot (up to 6 MB)</li></ul></div></aside></div></main><footer class="site-footer"><span><strong>AARK × BSF</strong> · 3rd Inter-School Swimming Competition</span><span>4 October 2026 · Vadodara</span></footer>
+
+<script>
+const KEY='aark-reg-draft-v5',IDEM='aark-reg-idem-v5',FILE_DB='aark-reg-files-v5';
+let config,selected=[];const f=document.getElementById('form'),statusEl=document.getElementById('status');let idem=localStorage.getItem(IDEM)||crypto.randomUUID();localStorage.setItem(IDEM,idem);
+function fileDB(){return new Promise((resolve,reject)=>{const q=indexedDB.open(FILE_DB,1);q.onupgradeneeded=()=>{if(!q.result.objectStoreNames.contains('files'))q.result.createObjectStore('files')};q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error)})}
+async function saveBlob(key,file){if(!file)return;const db=await fileDB();await new Promise((resolve,reject)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').put(file,key);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}
+async function getBlob(key){const db=await fileDB();const v=await new Promise((resolve,reject)=>{const tx=db.transaction('files','readonly'),q=tx.objectStore('files').get(key);q.onsuccess=()=>resolve(q.result);q.onerror=()=>reject(q.error)});db.close();return v}
+async function clearBlobs(){const db=await fileDB();await new Promise((resolve,reject)=>{const tx=db.transaction('files','readwrite');tx.objectStore('files').clear();tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error)});db.close()}
+function saveDraft(){const o={events:selected};for(const e of f.elements)if(e.name&&e.type!=='file'&&e.type!=='checkbox')o[e.name]=e.value;localStorage.setItem(KEY,JSON.stringify(o))}
+function restore(){try{const d=JSON.parse(localStorage.getItem(KEY)||'{}');selected=d.events||[];for(const[k,v]of Object.entries(d))if(k!=='events'&&f.elements[k])f.elements[k].value=v}catch{}}
+
+function openDobPicker(){const el=document.getElementById('dobInput');if(el.showPicker)el.showPicker();else el.focus()}
+function category(){return config?.categories.find(c=>f.dob.value>=c.min&&f.dob.value<=c.max)}
+function recalc(){const n=selected.filter(x=>x!=='4×50m Freestyle Relay').length;amount.textContent='₹'+(n*300+(selected.includes('4×50m Freestyle Relay')?800:0))}
+function render(){if(!config)return;const c=category();selected=selected.filter(ev=>c?.events.includes(ev));eventsBox.innerHTML='';if(!c){categoryBox.textContent=f.dob.value?'This date of birth is outside the eligible categories.':'Select date of birth to view the eligible category.';recalc();return}categoryBox.innerHTML='Eligible category: <b>'+c.name+'</b>';const box=document.createElement('div');box.style.marginTop='12px';box.innerHTML='<p style="margin:0 0 8px;color:#58748a;font-size:13px">Choose up to 4 individual events. Relay can be selected separately.</p>';for(const ev of c.events){const l=document.createElement('label');l.className='event-check';const ch=document.createElement('input');ch.type='checkbox';ch.checked=selected.includes(ev);ch.onchange=()=>{if(ch.checked){if(ev!=='4×50m Freestyle Relay'&&selected.filter(x=>x!=='4×50m Freestyle Relay').length>=4){ch.checked=false;alert('You can select a maximum of 4 individual events.');return}selected.push(ev)}else selected=selected.filter(x=>x!==ev);saveDraft();recalc()};l.append(ch,document.createTextNode(ev));box.append(l)}eventsBox.append(box);recalc()}
+(async()=>{submitBtn.disabled=true;try{const response=await fetch('/api/config');if(!response.ok)throw Error('Unable to load registration details.');config=await response.json();payee.textContent=config.payeeName;upi.textContent=config.upiId;payQr.src=config.paymentQrUrl;restore();render();submitBtn.disabled=false}catch(err){statusEl.textContent='Registration details could not be loaded. Please refresh to try again.'}})();
+f.addEventListener('input',e=>{if(e.target.name==='dob')render();saveDraft()});
+f.addEventListener('change',async e=>{saveDraft();if(e.target.name==='participantPhoto'&&e.target.files[0])await saveBlob('participantPhoto',e.target.files[0]);if(e.target.name==='paymentProof'&&e.target.files[0])await saveBlob('paymentProof',e.target.files[0])});
+f.addEventListener('submit',async e=>{e.preventDefault();if(!selected.length)return alert('Please select at least one event.');submitBtn.disabled=true;submitBtn.textContent='Completing Registration…';statusEl.textContent='Please wait while we confirm your registration.';const fd=new FormData(f);if(!f.participantPhoto.files[0]){const b=await getBlob('participantPhoto');if(b)fd.set('participantPhoto',b,b.name||'participant-photo.jpg')}if(!f.paymentProof.files[0]){const b=await getBlob('paymentProof');if(b)fd.set('paymentProof',b,b.name||'payment-proof.jpg')}fd.set('events',JSON.stringify(selected));fd.set('idempotencyKey',idem);try{const r=await fetch('/api/register',{method:'POST',body:fd}),j=await r.json();if(!r.ok)throw Error(j.error||'Registration could not be completed.');localStorage.removeItem(KEY);localStorage.removeItem(IDEM);await clearBlobs();location.replace('/success.html?token='+encodeURIComponent(j.ticketToken))}catch(err){statusEl.textContent=err.message+' Your entered details are still available.';submitBtn.disabled=false;submitBtn.textContent='Complete Registration'}});
+</script>
+</body>
+</html>
