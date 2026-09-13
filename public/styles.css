@@ -52,8 +52,17 @@ html:has(.admin-dialog[open]){overflow:hidden}
 .notice.registration-deadline time{display:inline-block;font-weight:700}
 
 /* Restore the original AARK × BSF wordmark and wave emblem on entry pages. */
-nav.co-branded-header{flex-wrap:wrap;justify-content:center;gap:12px 24px}
+/*nav.co-branded-header{flex-wrap:wrap;justify-content:center;gap:12px 24px}
 nav.co-branded-header .brand{width:100%;margin:0;justify-content:center}
 nav.co-branded-header .brand-mark{width:35px;height:35px;flex:0 0 35px;background:var(--accent);color:white;border-radius:10px;display:grid;place-items:center;font-size:28px;line-height:1}
 nav.co-branded-header .nav-cta{margin-left:0}
-@media(max-width:700px){nav.co-branded-header{gap:10px 18px}nav.co-branded-header .brand-mark{width:28px;height:28px;flex-basis:28px;font-size:23px}}
+@media(max-width:700px){nav.co-branded-header{gap:10px 18px}nav.co-branded-header .brand-mark{width:28px;height:28px;flex-basis:28px;font-size:23px}} */
+.registration-page nav{
+  background:rgba(248,253,255,.76);
+  border-bottom:1px solid rgba(11,41,65,.08);
+  box-shadow:0 8px 30px rgba(11,41,65,.05);
+}
+.registration-page nav .brand,
+.registration-page nav a{color:var(--reg-ink)}
+.registration-page nav a{opacity:.72;transition:.25s ease}
+.registration-page nav a:hover{opacity:1;transform:translateY(-1px)}
