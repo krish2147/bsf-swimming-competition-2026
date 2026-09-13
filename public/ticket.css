@@ -1,17 +1,23 @@
 .ticket-page{background:#edf3f7}
-.ticket-page .ticket-shell{width:min(680px,calc(100% - 28px));margin:36px auto 56px}
-.ticket-intro{text-align:center;margin-bottom:26px}.ticket-intro h1{font-size:clamp(30px,5vw,42px);margin:8px 0 12px}.ticket-intro p{color:var(--muted);margin-bottom:8px}
-#ticket{margin:0;overflow:hidden;border-radius:16px;box-shadow:0 14px 44px #10273e1c;background:#fff}
+.ticket-page .ticket-shell{width:min(680px,calc(100% - 28px));margin:28px auto 56px}
+.ticket-intro{text-align:center;margin-bottom:16px}.ticket-intro h1{font-size:clamp(30px,5vw,42px);margin:8px 0 12px}.ticket-intro p{color:var(--muted);margin-bottom:8px}
+#ticket{margin:18px 0 0;overflow:hidden;border-radius:16px;box-shadow:0 14px 44px #10273e1c;background:#fff}
 #ticketImage{display:block;width:100%;height:auto}
-.ticket-actions{display:flex;flex-wrap:wrap;gap:12px;margin:22px 0 14px}.ticket-actions button{flex:1 1 200px;min-height:50px}
+.ticket-actions{display:flex;flex-wrap:wrap;gap:12px;margin:16px 0 14px}.ticket-actions button{flex:1 1 200px;min-height:50px}.ticket-actions-top{margin-top:10px}
+.ticket-actions-top #downloadTicket{font-size:16px;font-weight:800}
 .ticket-actions [hidden]{display:none}.ticket-help{font-size:13px;text-align:center;color:var(--muted)}
 .ticket-wallets{padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}.ticket-wallets p{margin:0 0 8px}.ticket-wallets p:first-child{font-weight:700;color:var(--text)}.ticket-wallets span{margin-left:8px;font-size:11px;background:#dfe9f1;padding:4px 8px;border-radius:12px}
 .ticket-accessible{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 #ticketStatus:empty{display:none}
+.whatsapp-dialog{width:min(520px,calc(100% - 28px));padding:0;border:0;border-radius:22px;background:transparent;box-shadow:0 24px 80px #071c2e55}.whatsapp-dialog::backdrop{background:#071c2e99;backdrop-filter:blur(5px)}
+.whatsapp-dialog-card{background:#fff;border-radius:22px;padding:30px;text-align:center}.whatsapp-dialog-card .eyebrow{margin:12px 0 6px}.whatsapp-dialog-card h2{margin:6px 0 10px;font-size:clamp(25px,5vw,34px);color:var(--text)}.whatsapp-dialog-card>p:not(.eyebrow):not(.whatsapp-countdown){margin:0 auto 14px;color:var(--muted);max-width:420px;line-height:1.55}
+.whatsapp-icon{width:64px;height:64px;margin:0 auto;border-radius:50%;display:grid;place-items:center;background:#e8f8ee;color:#128c4b;font-size:34px;font-weight:900}.whatsapp-countdown{margin:18px 0;color:var(--text);font-size:15px}.whatsapp-countdown strong{display:inline-grid;place-items:center;min-width:30px;height:30px;padding:0 8px;border-radius:20px;background:#e8f8ee;color:#128c4b;font-size:17px}
+.whatsapp-dialog-actions{display:grid;gap:10px}.whatsapp-dialog-actions button,.whatsapp-join{width:100%;min-height:50px}.whatsapp-join{display:flex;align-items:center;justify-content:center;padding:12px 16px;border-radius:8px;background:#25d366;color:#082b17!important;font-weight:800;text-decoration:none}.whatsapp-join:hover{background:#20bd5a}.whatsapp-dialog-actions .secondary{margin-top:2px}
+@media(max-width:560px){.ticket-page .ticket-shell{margin-top:20px}.whatsapp-dialog-card{padding:24px 18px}.ticket-actions-top{position:relative}.ticket-actions button{flex-basis:100%}}
 @page{size:A4 portrait;margin:12mm}
 @media print{
  html,body.ticket-page{background:#fff!important;margin:0!important;padding:0!important}
- .ticket-page nav,.ticket-intro,.ticket-actions,.ticket-help,.ticket-wallets,#ticketStatus{display:none!important}
+ .ticket-page nav,.ticket-intro,.ticket-actions,.ticket-help,.ticket-wallets,#ticketStatus,.registration-deadline,.whatsapp-dialog{display:none!important}
  .ticket-page .ticket-shell{width:100%;margin:0!important}
  #ticket{box-shadow:none;border-radius:0;break-inside:avoid;width:100%;text-align:center}
  #ticketImage{width:auto;height:auto;max-width:100%;max-height:268mm;margin:auto;print-color-adjust:exact;-webkit-print-color-adjust:exact}
