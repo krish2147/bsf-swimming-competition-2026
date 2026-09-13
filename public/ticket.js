@@ -1,5 +1,6 @@
 (()=>{
   const params=new URLSearchParams(location.search),hasRegistrationToken=params.has('token');
+  const tokenForState=params.get('token')||'',whatsappSessionKey=tokenForState?`bsf-whatsapp-opened-${tokenForState}`:'';
   if(hasRegistrationToken){
     history.replaceState({done:true},'',location.href);
     history.pushState({guard:true},'',location.href);
@@ -8,7 +9,8 @@
   const image=document.getElementById('ticketImage'),status=document.getElementById('ticketStatus');
   const download=document.getElementById('downloadTicket'),print=document.getElementById('printTicket'),retry=document.getElementById('retryTicket');
   const popupDownload=document.getElementById('popupDownloadTicket'),whatsappDialog=document.getElementById('whatsappDialog'),countdownEl=document.getElementById('whatsappCountdown'),joinWhatsapp=document.getElementById('joinWhatsapp'),stayOnTicket=document.getElementById('stayOnTicket');
-  let ticketUrl=null,registrationId='',whatsappTimer=null,whatsappOpened=false;
+  let ticketUrl=null,registrationId='',whatsappTimer=null,whatsappOpened=!!(whatsappSessionKey&&sessionStorage.getItem(whatsappSessionKey)==='1');
+  const markWhatsappOpened=()=>{whatsappOpened=true;if(whatsappSessionKey)sessionStorage.setItem(whatsappSessionKey,'1')};
   const loadImage=src=>new Promise((resolve,reject)=>{const img=new Image();img.onload=()=>resolve(img);img.onerror=()=>reject(Error('A ticket image could not load. Please try again.'));img.src=src});
   function startDownload(){
     if(!ticketUrl)return;
@@ -17,18 +19,18 @@
   }
   function stopWhatsappCountdown(){if(whatsappTimer){clearInterval(whatsappTimer);whatsappTimer=null}}
   function openWhatsapp(){
-    if(whatsappOpened)return;whatsappOpened=true;stopWhatsappCountdown();
+    if(whatsappOpened)return;markWhatsappOpened();stopWhatsappCountdown();
     if(whatsappDialog?.open)whatsappDialog.close();
     const popup=window.open(joinWhatsapp.href,'_blank','noopener,noreferrer');
     if(!popup)location.href=joinWhatsapp.href;
   }
   function showWhatsappPopup(){
-    if(!hasRegistrationToken||!whatsappDialog||!joinWhatsapp)return;
+    if(!hasRegistrationToken||!whatsappDialog||!joinWhatsapp||whatsappOpened)return;
     let remaining=5;countdownEl.textContent=remaining;
     if(!whatsappDialog.open)whatsappDialog.showModal();
     whatsappTimer=setInterval(()=>{remaining-=1;countdownEl.textContent=Math.max(remaining,0);if(remaining<=0)openWhatsapp()},1000);
   }
-  joinWhatsapp?.addEventListener('click',()=>{whatsappOpened=true;stopWhatsappCountdown();if(whatsappDialog?.open)whatsappDialog.close()});
+  joinWhatsapp?.addEventListener('click',()=>{markWhatsappOpened();stopWhatsappCountdown();if(whatsappDialog?.open)whatsappDialog.close()});
   stayOnTicket?.addEventListener('click',()=>{stopWhatsappCountdown();if(whatsappDialog?.open)whatsappDialog.close()});
   popupDownload?.addEventListener('click',startDownload);
 
@@ -57,5 +59,5 @@
   function accessibleDescription(data){const description=document.getElementById('ticketDescription');description.replaceChildren();const fields=[['Status','Registration Successful'],['Participant',data.fullName],['Registration ID',data.registrationId],['School',data.schoolName],['Gender',data.gender],['Age category',data.category],['Selected events',(data.events||[]).map(e=>data.eventLabels?.[e]||e).join(', ')],['Competition date',data.competitionDate],['Registration deadline',data.registrationDeadline],['Venue',data.venue],['Payment review',data.paymentStatus]];if(data.requiresFloaters)fields.push(['Important reminder','Bring Your Own Floaters — BSF/School will not provide floaters for this event.']);const dl=document.createElement('dl');for(const [label,value] of fields){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;dd.textContent=value||'—';dl.append(dt,dd)}description.append(dl);image.alt=`BSF entry pass for ${data.fullName}, registration ${data.registrationId}, with check-in QR code`}
   async function prepare(){download.disabled=true;print.disabled=true;if(popupDownload)popupDownload.disabled=true;retry.hidden=true;status.textContent='Preparing your entry pass…';try{const token=params.get('token');if(!token)throw Error('This ticket link is missing its registration token. Please use your original confirmation link.');const response=await fetch('/api/ticket/'+encodeURIComponent(token));if(!response.ok)throw Error(response.status===404?'Ticket not found. Please check your original confirmation link.':'Your ticket could not be loaded. Please try again.');const data=await response.json();registrationId=data.registrationId;await document.fonts.ready;const [logo,qr]=await Promise.all([loadImage('/bsf-logo.jpeg'),loadImage(data.qrDataUrl)]);const canvas=renderTicket(data,logo,qr);const blob=await new Promise((resolve,reject)=>canvas.toBlob(value=>value?resolve(value):reject(Error('Ticket image could not be prepared. Please try again.')),'image/png'));if(ticketUrl)URL.revokeObjectURL(ticketUrl);ticketUrl=URL.createObjectURL(blob);image.src=ticketUrl;await image.decode();accessibleDescription(data);document.getElementById('ticket').hidden=false;download.disabled=false;print.disabled=false;if(popupDownload)popupDownload.disabled=false;status.textContent='';}catch(error){status.textContent=error.message;retry.hidden=false}}
   download.addEventListener('click',startDownload);print.addEventListener('click',()=>window.print());retry.addEventListener('click',prepare);
-  prepare();if(hasRegistrationToken)setTimeout(showWhatsappPopup,250);
+  prepare();if(hasRegistrationToken&&!whatsappOpened)setTimeout(showWhatsappPopup,250);
 })();
