@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Recover your Baroda Swim Front Inter-School Swimming Competition ticket using the registered phone number and participant date of birth.">
+  <link rel="icon" href="/bsf-logo.jpeg"><title>Find My Ticket | Baroda Swim Front</title>
+  <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/mobile-nav.css">
+  <style>
+    .recovery-shell{width:min(720px,calc(100% - 28px));margin:46px auto 70px}.recovery-head{text-align:center;margin-bottom:26px}.recovery-head h1{font-size:clamp(32px,6vw,52px);margin:8px 0 12px}.recovery-head p{color:var(--muted);max-width:600px;margin:0 auto}.recovery-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:clamp(20px,5vw,34px);box-shadow:0 16px 48px rgba(16,45,70,.08)}.recovery-form{display:grid;grid-template-columns:1fr 1fr;gap:18px}.recovery-form label{font-weight:700;color:var(--text)}.recovery-form input{width:100%;margin-top:8px}.recovery-form button{grid-column:1/-1;min-height:52px}.recovery-note{font-size:13px;color:var(--muted);margin:16px 0 0}.recovery-status{margin-top:20px}.recovery-results{display:grid;gap:14px;margin-top:22px}.recovery-result{border:1px solid var(--line);border-radius:14px;padding:18px;background:#f8fbfd}.recovery-result h2{font-size:20px;margin:0 0 6px}.recovery-result p{margin:3px 0;color:var(--muted)}.recovery-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:15px}.recovery-actions a{flex:1 1 190px;text-align:center;text-decoration:none}.whatsapp-recovery{background:#167a4a!important;border-color:#167a4a!important;color:#fff!important}@media(max-width:620px){.recovery-form{grid-template-columns:1fr}.recovery-shell{margin-top:28px}}
+  </style>
+</head>
+<body>
+<nav class="site-nav" aria-label="Main navigation"><a class="brand" href="/">AARK × BSF <small>/ SWIMMING</small></a><button class="nav-toggle" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="siteNavLinks"><span class="nav-toggle-bar"></span><span class="nav-toggle-bar"></span><span class="nav-toggle-bar"></span></button><div class="site-nav-links" id="siteNavLinks"><a href="/">Home</a><a href="/register.html">Register</a><a href="/results.html">Results</a><a href="/timings.html">Timings</a></div></nav>
+<main class="recovery-shell">
+  <header class="recovery-head"><p class="eyebrow">TICKET RECOVERY</p><h1>Find My Ticket</h1><p>Already registered but lost your ticket link? Enter the same phone number used during registration and the participant’s date of birth.</p></header>
+  <section class="recovery-card">
+    <form id="recoveryForm" class="recovery-form">
+      <label>Registered phone number<input id="recoveryPhone" name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="10-digit mobile number" maxlength="16" required></label>
+      <label>Participant date of birth<input id="recoveryDob" name="dob" type="date" autocomplete="bday" required></label>
+      <button id="recoverySubmit" type="submit">Find My Ticket</button>
+    </form>
+    <p class="recovery-note">For privacy, both details must match the original registration. Your phone number is not displayed publicly.</p>
+    <p id="recoveryStatus" class="notice recovery-status" role="status" aria-live="polite" hidden></p>
+    <div id="recoveryResults" class="recovery-results" aria-live="polite"></div>
+  </section>
+</main>
+<script src="/mobile-nav.js" defer></script>
+<script>
+(()=>{
+  const form=document.getElementById('recoveryForm'),phone=document.getElementById('recoveryPhone'),dob=document.getElementById('recoveryDob'),submit=document.getElementById('recoverySubmit'),status=document.getElementById('recoveryStatus'),results=document.getElementById('recoveryResults');
+  const whatsapp='https://chat.whatsapp.com/CZKqGvrQ1rFGY5MfGgjnVq?s=cl&p=a&mlu=4&ilr=4';
+  const showStatus=(message,isError=false)=>{status.hidden=false;status.textContent=message;status.classList.toggle('error',isError)};
+  const buttonLink=(text,href,extra='')=>{const a=document.createElement('a');a.className=`btn ${extra}`.trim();a.href=href;a.textContent=text;return a};
+  form.addEventListener('submit',async e=>{
+    e.preventDefault();results.replaceChildren();submit.disabled=true;showStatus('Looking for your registration…');
+    try{
+      const response=await fetch('/api/ticket-recovery',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:phone.value,dob:dob.value})});
+      const data=await response.json().catch(()=>({}));
+      if(!response.ok)throw Error(data.error||'Ticket could not be found. Please check your details.');
+      showStatus(data.matches.length===1?'Registration found. You can reopen your ticket below.':`${data.matches.length} matching registrations found.`);
+      for(const item of data.matches){
+        const card=document.createElement('article');card.className='recovery-result';
+        const title=document.createElement('h2');title.textContent=item.fullName;
+        const school=document.createElement('p');school.textContent=item.schoolName||'School not recorded';
+        const id=document.createElement('p');id.textContent=`Registration ID: ${item.registrationId}`;
+        const actions=document.createElement('div');actions.className='recovery-actions';
+        const ticket=buttonLink('Open / Download Ticket',item.ticketUrl);ticket.addEventListener('click',()=>{try{sessionStorage.setItem(`bsf-whatsapp-opened-${new URL(item.ticketUrl,location.origin).searchParams.get('token')}`,'1')}catch{}});
+        const join=buttonLink('Join WhatsApp Group',whatsapp,'whatsapp-recovery');join.target='_blank';join.rel='noopener noreferrer';
+        actions.append(ticket,join);card.append(title,school,id,actions);results.append(card);
+      }
+    }catch(error){showStatus(error.message,true)}finally{submit.disabled=false}
+  });
+})();
+</script>
+</body>
+</html>
