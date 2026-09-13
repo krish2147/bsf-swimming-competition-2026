@@ -9,3 +9,36 @@
 @media(max-width:440px){nav{gap:10px}nav .brand{width:100%;margin:0}.brand-logo{width:44px;height:44px}.brand>span{font-size:13px}nav .nav-cta{margin-left:auto}.hero h1{font-size:43px}.registration-page .grid{grid-template-columns:1fr}.payment-card>.grid:first-child{grid-template-columns:1fr 1fr;gap:12px}.total-amount{font-size:32px}.payment-card{padding:14px}.pool-caption{left:16px;right:16px;bottom:16px;padding:14px}.hero-actions .btn{flex:1;padding:12px}.registration-section{padding:17px}.section-heading{gap:10px}}
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*,*::before,*::after{transition:none!important;animation:none!important}}
 nav .nav-cta[aria-current=page]{color:#fff;background:#1268d3}
+/* Payment QR: retain the card preview and show the original asset in a lightbox. */
+.payment-qr-controls{display:grid;justify-items:center;gap:8px;min-width:0}
+button.payment-qr-zoom{display:block;padding:0;background:transparent;border:0;max-width:100%;cursor:zoom-in;border-radius:10px}
+.payment-qr-zoom .qr{display:block}
+button.payment-qr-zoom:hover{background:transparent;box-shadow:0 0 0 3px #1268d322}
+.payment-qr-hint{font-size:11px;color:var(--muted);text-align:center;overflow-wrap:anywhere}
+.payment-qr-hint:empty{display:none}
+button.payment-qr-download{min-height:44px;padding:9px 12px;gap:0;max-width:100%}
+.payment-qr-dialog{border:0;border-radius:12px;padding:16px;max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);background:#fff;color:var(--text);box-shadow:0 20px 80px #0005;overflow:auto}
+.payment-qr-dialog::backdrop{background:#102030c9}
+.payment-qr-dialog-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.payment-qr-dialog-header h2{font-size:18px;margin:0}
+button.payment-qr-close{width:44px;height:44px;flex:0 0 44px;padding:0;font-size:28px;line-height:1}
+#qrLarge{display:block;width:auto;height:auto;max-width:min(720px,calc(100vw - 56px));max-height:calc(100dvh - 124px);margin:auto;object-fit:contain;background:#fff}
+html:has(#qrDialog[open]){overflow:hidden}
+
+/* Keep existing admin cards; contain wide data and same-page media dialogs. */
+.admin-page nav{flex-wrap:wrap;gap:16px}.admin-page main{min-width:0}
+.admin-error:empty{display:none}.admin-error{overflow-wrap:anywhere}
+.admin-table-scroll{overflow-x:auto;max-width:100%}.admin-table-scroll table{min-width:1000px}
+.admin-table-scroll td{vertical-align:top;overflow-wrap:anywhere;max-width:240px}
+.admin-table-scroll td button{font-size:12px;padding:8px;overflow-wrap:anywhere}
+.admin-filters{align-items:end}.admin-pagination{margin-top:16px}.admin-pagination span{text-align:center}
+.admin-page .row{gap:10px}.admin-page .row>button{flex:1 1 120px;min-height:44px}
+.admin-dialog{width:min(760px,calc(100vw - 24px));max-width:calc(100vw - 24px);max-height:calc(100dvh - 24px);padding:20px;border:0;border-radius:12px;color:var(--text);background:#fff;overflow:auto}
+.admin-dialog::backdrop{background:#102030c9}.admin-dialog-header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.admin-dialog-header h2{font-size:22px;margin:0}.admin-close{width:44px;height:44px;flex:0 0 44px;padding:0;font-size:28px}
+.admin-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.admin-details dt{font-size:12px;color:var(--muted)}.admin-details dd{margin:0;overflow-wrap:anywhere}
+.admin-dialog-content{overflow-wrap:anywhere}.admin-media-button{padding:0;display:block;background:transparent;cursor:zoom-in;max-width:100%;margin:12px 0}
+.admin-media-button img{display:block;width:auto;max-width:100%;max-height:220px;border-radius:8px}
+#mediaDialog{width:fit-content}#mediaDialog img{display:block;margin:auto;width:auto;height:auto;max-width:min(900px,calc(100vw - 64px));max-height:calc(100dvh - 130px);object-fit:contain}
+html:has(.admin-dialog[open]){overflow:hidden}
+@media(max-width:600px){.admin-page .grid{grid-template-columns:minmax(0,1fr)}.admin-dialog{padding:16px}.admin-details{grid-template-columns:1fr}.admin-page nav .brand{white-space:normal}.admin-page .card{padding:18px}.admin-page .row input,.admin-page .row select{flex:1 1 150px}}

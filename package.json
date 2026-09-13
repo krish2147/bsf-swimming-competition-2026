@@ -4,7 +4,9 @@
   "private": true,
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test",
+    "test:admin-ui": "node scripts/verify-admin.cjs"
   },
   "dependencies": {
     "connect-pg-simple": "^10.0.0",
@@ -14,5 +16,9 @@
     "pg": "^8.13.1",
     "qrcode": "^1.5.4",
     "uuid": "^11.1.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "playwright": "^1.63.0"
   }
 }
