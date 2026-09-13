@@ -120,7 +120,7 @@ app.post('/api/register',upload.fields([{name:'participantPhoto',maxCount:1},{na
       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,$18)`,[
         registrationId,ticketToken,b.idempotencyKey,b.fullName.trim(),b.schoolName.trim(),b.gender,
         b.dob,c.name,b.phone.trim(),b.email.trim(),b.guardianName?.trim()||null,
-        eventsJson, // $12: JSON text, never a JavaScript array.
+        eventsJson,
         amount,photo.buffer,photo.mimetype,proof.buffer,proof.mimetype,b.paymentUtr?.trim()||null
       ]);
       await cdb.query('INSERT INTO whatsapp_queue(registration_id,phone,message_type,payload_json) VALUES($1,$2,$3,$4)',[registrationId,b.phone.trim(),'ticket',{registrationId,ticketToken}]);
@@ -151,6 +151,28 @@ app.get('/api/ticket/:token',async(req,res)=>{
   if(!r)return res.status(404).json({error:'Ticket not found'});
   const scanUrl=`${BASE_URL}/admin/checkin.html?token=${encodeURIComponent(r.ticket_token)}`;
   res.json({registrationId:r.registration_id,fullName:r.full_name,schoolName:r.school_name,category:r.age_category,gender:r.gender,events:registrationEvents(r.events_json),amount:r.amount,paymentStatus:r.payment_status,requiresFloaters:requiresFloaters(CATEGORIES.find(c=>c.name===r.age_category),registrationEvents(r.events_json)),eventLabels:CATEGORIES.find(c=>c.name===r.age_category)?.eventLabels||{},competitionDate:'4 October 2026',registrationDeadline:'30 September 2026',venue:'Vadodara, Gujarat',checkinUrl:scanUrl,qrDataUrl:await QRCode.toDataURL(scanUrl,{margin:4,width:720}),token:r.ticket_token});
+});
+
+app.post('/api/ticket-recovery',async(req,res)=>{
+  res.set('Cache-Control','no-store');
+  try{
+    const phone=typeof req.body?.phone==='string'?req.body.phone.trim():'',dob=typeof req.body?.dob==='string'?req.body.dob.trim():'';
+    const digits=value=>String(value||'').replace(/\D/g,'');
+    const normalizePhone=value=>{const d=digits(value);return d.length>10?d.slice(-10):d};
+    if(normalizePhone(phone).length!==10||!/^\d{4}-\d{2}-\d{2}$/.test(dob))return res.status(400).json({error:'Enter the registered 10-digit phone number and participant date of birth.'});
+    const rows=await q('SELECT registration_id,ticket_token,full_name,school_name,phone FROM registrations WHERE dob=$1 ORDER BY created_at DESC',[dob]);
+    const matches=rows.filter(r=>normalizePhone(r.phone)===normalizePhone(phone)).slice(0,5).map(r=>({
+      registrationId:r.registration_id,
+      fullName:r.full_name,
+      schoolName:r.school_name,
+      ticketUrl:`/success.html?token=${encodeURIComponent(r.ticket_token)}`
+    }));
+    if(!matches.length)return res.status(404).json({error:'No registration matched those details. Check the phone number and participant date of birth.'});
+    res.json({ok:true,matches});
+  }catch(e){
+    console.error('ticket recovery',e);
+    res.status(500).json({error:'Ticket recovery is temporarily unavailable. Please try again.'});
+  }
 });
 
 app.get('/api/public/results',async(req,res)=>{
@@ -274,7 +296,6 @@ app.get('/api/admin/registrations',requireAdmin,async(req,res)=>{
     values.push(filters.search.trim());
     clauses.push(`strpos(lower(concat_ws(' ',registration_id,full_name,school_name,phone)),lower($${values.length}))>0`);
   }
-  // Exclude image bytes; normalize legacy event values before event filtering and pagination.
   const rows=(await q(`SELECT ${registrationColumns} FROM registrations ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY created_at DESC,registration_id`,values)).map(registrationRow).filter(r=>!filters.event||r.events_json.includes(filters.event));
   res.json({rows:rows.slice((page-1)*limit,page*limit),total:rows.length,page,limit});
 });
