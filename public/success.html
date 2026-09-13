@@ -8,15 +8,39 @@
 <body class="ticket-page">
 <nav><a class="brand" href="/" aria-label="Baroda Swim Front home"><img class="brand-logo" src="/bsf-logo.jpeg" alt="Baroda Swim Front"><span>BARODA SWIM FRONT <small>/ SWIMMING</small></span></a><a href="/">Home</a><a href="/results.html">Results</a><a href="/timings.html">Timings</a></nav>
 <main class="ticket-shell">
-  <header class="ticket-intro"><p class="eyebrow">YOU’RE ON THE START LIST</p><h1>See you at the pool.</h1><p>Save your entry pass and show its QR at check-in.</p><p class="notice registration-deadline"><strong>Registration Deadline:</strong> <time datetime="2026-09-30">30 September 2026</time></p></header>
+  <header class="ticket-intro"><p class="eyebrow">REGISTRATION SUCCESSFUL</p><h1>Your ticket is ready.</h1><p>Download and save your entry pass now. Show its QR at check-in.</p></header>
+
+  <div class="ticket-actions ticket-actions-top" aria-label="Ticket actions">
+    <button id="downloadTicket" type="button" disabled>Download Ticket</button>
+    <button id="printTicket" type="button" class="secondary" disabled>Print / Save as PDF</button>
+    <button id="retryTicket" type="button" class="secondary" hidden>Try again</button>
+  </div>
   <p id="ticketStatus" class="notice" role="status" aria-live="polite">Preparing your entry pass…</p>
+
   <article id="ticket" aria-label="Competition entry pass" hidden>
     <img id="ticketImage" alt="" aria-describedby="ticketDescription">
     <div id="ticketDescription" class="ticket-accessible"></div>
   </article>
-  <div class="ticket-actions"><button id="downloadTicket" type="button" disabled>Download Ticket</button><button id="printTicket" type="button" class="secondary" disabled>Print / Save as PDF</button><button id="retryTicket" type="button" class="secondary" hidden>Try again</button></div>
+
   <p class="ticket-help">Bring this pass and the required Aadhaar copy on event day. Keep your QR private.</p>
+  <p class="notice registration-deadline"><strong>Registration Deadline:</strong> <time datetime="2026-09-30">30 September 2026</time></p>
   <section class="ticket-wallets" aria-label="Wallet availability"><p>Wallet passes <span>Coming soon</span></p><p>Google Wallet and Apple Wallet are not available yet. Download your ticket or save it as a PDF for check-in.</p></section>
 </main>
+
+<dialog id="whatsappDialog" class="whatsapp-dialog" aria-labelledby="whatsappTitle" aria-describedby="whatsappMessage">
+  <div class="whatsapp-dialog-card">
+    <div class="whatsapp-icon" aria-hidden="true">✓</div>
+    <p class="eyebrow">REGISTRATION COMPLETE</p>
+    <h2 id="whatsappTitle">You’re on the start list! 🎉</h2>
+    <p id="whatsappMessage">Your ticket is being prepared. Join the official competition WhatsApp group for important updates.</p>
+    <p class="whatsapp-countdown">Opening WhatsApp in <strong id="whatsappCountdown">5</strong> seconds…</p>
+    <div class="whatsapp-dialog-actions">
+      <button id="popupDownloadTicket" type="button" disabled>Download Ticket</button>
+      <a id="joinWhatsapp" class="whatsapp-join" href="https://chat.whatsapp.com/CZKqGvrQ1rFGY5MfGgjnVq?s=cl&p=a&mlu=4&ilr=4" target="_blank" rel="noopener noreferrer">Join WhatsApp Group Now</a>
+      <button id="stayOnTicket" type="button" class="secondary">Stay on ticket page</button>
+    </div>
+  </div>
+</dialog>
+
 <script src="/ticket.js" defer></script>
 </body></html>
