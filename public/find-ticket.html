@@ -28,7 +28,7 @@
 <script>
 (()=>{
   const form=document.getElementById('recoveryForm'),phone=document.getElementById('recoveryPhone'),dob=document.getElementById('recoveryDob'),submit=document.getElementById('recoverySubmit'),status=document.getElementById('recoveryStatus'),results=document.getElementById('recoveryResults');
-  const whatsapp='https://chat.whatsapp.com/CZKqGvrQ1rFGY5MfGgjnVq?s=cl&p=a&mlu=4&ilr=4';
+  const whatsapp='https://chat.whatsapp.com/KjaH2HlIPVzIQ8riESfEKo?s=cl&p=a&mlu=4&ilr=4';
   const showStatus=(message,isError=false)=>{status.hidden=false;status.textContent=message;status.classList.toggle('error',isError)};
   const buttonLink=(text,href,extra='')=>{const a=document.createElement('a');a.className=`btn ${extra}`.trim();a.href=href;a.textContent=text;return a};
   form.addEventListener('submit',async e=>{
