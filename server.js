@@ -9,6 +9,7 @@ const {pool,initDb,withTransaction}=require('./src/db');
 const {CATEGORIES,categoryForDob,eventKey,parseEventKey}=require('./src/competition');
 
 const {registrationEvents,registrationRow,registrationColumns}=require('./src/admin-data');
+const {requiresFloaters}=require('./public/floater-policy');
 
 const app=express();
 const PORT=process.env.PORT||3000;
@@ -69,12 +70,13 @@ app.get('/api/config',(req,res)=>res.json({
 app.post('/api/register',upload.fields([{name:'participantPhoto',maxCount:1},{name:'paymentProof',maxCount:1}]),async(req,res)=>{
   try{
     const b=req.body||{};
-    for(const field of ['fullName','schoolName','dob','phone','idempotencyKey']){
+    for(const field of ['fullName','schoolName','dob','phone','email','idempotencyKey']){
       if(typeof b[field]!=='string'||!b[field].trim())return res.status(400).json({error:`Missing or invalid required field: ${field}.`});
     }
-    for(const field of ['email','guardianName','paymentUtr']){
+    for(const field of ['guardianName','paymentUtr']){
       if(b[field]!=null&&typeof b[field]!=='string')return res.status(400).json({error:`Invalid field: ${field}.`});
     }
+    if(b.email.trim().length>254||! /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(b.email.trim()))return res.status(400).json({error:'Please enter a valid email address.'});
     const date=new Date(b.dob);
     if(!/^\d{4}-\d{2}-\d{2}$/.test(b.dob)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==b.dob||date>new Date())return res.status(400).json({error:'Invalid date of birth.'});
     const c=categoryForDob(b.dob);
@@ -92,6 +94,9 @@ app.post('/api/register',upload.fields([{name:'participantPhoto',maxCount:1},{na
     }
     const events=normalizedEvents;
     const eventsJson=JSON.stringify(normalizedEvents);
+    if(requiresFloaters(c,events)&&b.floatersAcknowledged!==true&&b.floatersAcknowledged!=='true'){
+      return res.status(400).json({error:'Please acknowledge that you must bring your own floaters; BSF and the school will not provide them.',code:'FLOATERS_ACKNOWLEDGEMENT_REQUIRED'});
+    }
     const individuals=events.filter(x=>x!=='4×50m Freestyle Relay');
     const relay=events.includes('4×50m Freestyle Relay');
     if(individuals.length>4)return res.status(400).json({error:'Maximum 4 individual events allowed.'});
@@ -114,7 +119,7 @@ app.post('/api/register',upload.fields([{name:'participantPhoto',maxCount:1},{na
         participant_photo,participant_photo_mime,payment_proof,payment_proof_mime,payment_utr
       ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15,$16,$17,$18)`,[
         registrationId,ticketToken,b.idempotencyKey,b.fullName.trim(),b.schoolName.trim(),b.gender,
-        b.dob,c.name,b.phone.trim(),b.email?.trim()||null,b.guardianName?.trim()||null,
+        b.dob,c.name,b.phone.trim(),b.email.trim(),b.guardianName?.trim()||null,
         eventsJson, // $12: JSON text, never a JavaScript array.
         amount,photo.buffer,photo.mimetype,proof.buffer,proof.mimetype,b.paymentUtr?.trim()||null
       ]);
@@ -142,10 +147,10 @@ app.get('/api/media/:registrationId/:kind',requireAdmin,async(req,res)=>{
 });
 
 app.get('/api/ticket/:token',async(req,res)=>{
-  const r=(await q('SELECT registration_id,ticket_token,full_name,school_name,age_category,gender,events_json,amount FROM registrations WHERE ticket_token=$1',[req.params.token]))[0];
+  const r=(await q('SELECT registration_id,ticket_token,full_name,school_name,age_category,gender,events_json,amount,payment_status FROM registrations WHERE ticket_token=$1',[req.params.token]))[0];
   if(!r)return res.status(404).json({error:'Ticket not found'});
   const scanUrl=`${BASE_URL}/admin/checkin.html?token=${encodeURIComponent(r.ticket_token)}`;
-  res.json({registrationId:r.registration_id,fullName:r.full_name,schoolName:r.school_name,category:r.age_category,gender:r.gender,events:registrationEvents(r.events_json),amount:r.amount,qrDataUrl:await QRCode.toDataURL(scanUrl,{margin:1,width:360}),token:r.ticket_token});
+  res.json({registrationId:r.registration_id,fullName:r.full_name,schoolName:r.school_name,category:r.age_category,gender:r.gender,events:registrationEvents(r.events_json),amount:r.amount,paymentStatus:r.payment_status,requiresFloaters:requiresFloaters(CATEGORIES.find(c=>c.name===r.age_category),registrationEvents(r.events_json)),eventLabels:CATEGORIES.find(c=>c.name===r.age_category)?.eventLabels||{},competitionDate:'4 October 2026',registrationDeadline:'30 September 2026',venue:'Vadodara, Gujarat',checkinUrl:scanUrl,qrDataUrl:await QRCode.toDataURL(scanUrl,{margin:4,width:720}),token:r.ticket_token});
 });
 
 app.get('/api/public/results',async(req,res)=>{

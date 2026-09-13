@@ -7,7 +7,7 @@ let base,cookie;
 after(close);
 async function api(path,body,auth=true){const response=await fetch(base+path,{method:body?'POST':'GET',headers:{...(auth?{cookie}:{}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:response.status,body:await response.json()}}
 async function register(overrides={}){
- const values={fullName:'Admin Test Swimmer',schoolName:'Test School',gender:'Boys',dob:'2015-05-01',phone:'9988776655',events:JSON.stringify(['25m Freestyle','25m Backstroke']),idempotencyKey:crypto.randomUUID(),...overrides};
+ const values={fullName:'Admin Test Swimmer',schoolName:'Test School',gender:'Boys',dob:'2015-05-01',email:'parent@example.com',phone:'9988776655',events:JSON.stringify(['25m Freestyle','25m Backstroke']),idempotencyKey:crypto.randomUUID(),...overrides};
  const body=new FormData();for(const [k,v] of Object.entries(values))body.set(k,v);
  body.set('participantPhoto',new Blob(['photo bytes'],{type:'image/png'}),'photo.png');body.set('paymentProof',new Blob(['proof bytes'],{type:'image/jpeg'}),'proof.jpg');
  const response=await fetch(base+'/api/register',{method:'POST',body});assert.equal(response.status,200);return response.json();
@@ -41,7 +41,7 @@ test('admin end-to-end API regression',async t=>{
   for(const suffix of ['page=0','limit=10000','search[x]=bad'])assert.equal((await api('/api/admin/registrations?'+suffix)).status,400);
  });
  await t.test('participant details include ticket QR, optional fields and protected media URLs',async()=>{
-  const result=await api('/api/admin/registrations/'+id);assert.equal(result.status,200);assert.equal(result.body.registration_id,id);assert.equal(result.body.email,null);assert.ok(result.body.qrDataUrl.startsWith('data:image/png;base64,'));assert.ok(result.body.ticketUrl.includes(token));assert.deepEqual(result.body.events_json,['25m Freestyle','25m Backstroke']);assert.equal((await api('/api/admin/registrations/missing')).status,404);
+  const result=await api('/api/admin/registrations/'+id);assert.equal(result.status,200);assert.equal(result.body.registration_id,id);assert.equal(result.body.email,'parent@example.com');assert.equal(result.body.guardian_name,null);assert.ok(result.body.qrDataUrl.startsWith('data:image/png;base64,'));assert.ok(result.body.ticketUrl.includes(token));assert.deepEqual(result.body.events_json,['25m Freestyle','25m Backstroke']);assert.equal((await api('/api/admin/registrations/missing')).status,404);
   const checkin=await api('/api/admin/checkin/'+token);assert.equal(checkin.status,200);assert.deepEqual(checkin.body.events,result.body.events_json);assert.equal(checkin.body.dob,'2015-05-01');
  });
  await t.test('media returns exact original bytes and sensible missing responses',async()=>{

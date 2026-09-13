@@ -51,7 +51,7 @@ test('registration JSONB integration',async t=>{
     assert.equal(prepareValue(['25m Freestyle']),'{"25m Freestyle"}');
     await assert.rejects(query('SELECT $1::jsonb',[['25m Freestyle']]),{code:'22P02'});
   });
-  const cases=[['one',['25m Freestyle'],{}],['two',['25m Backstroke','25m Freestyle'],{}],['four',['25m Freestyle','50m Freestyle','25m Backstroke','25m Breaststroke'],{}],['Under-6 spaces',['25m Freestyle Kick with Board'],{dob:'2021-05-01'}],['relay plus four',['25m Freestyle','50m Freestyle','25m Backstroke','25m Breaststroke','4×50m Freestyle Relay'],{}],['array input',['25m Freestyle','25m Backstroke'],{events:['25m Freestyle','25m Backstroke']}],['fallback',['25m Freestyle'],{events:undefined,events_json:'["25m Freestyle"]'}],['plain string',['25m Freestyle'],{events:'25m Freestyle'}]];
+  const cases=[['one',['25m Freestyle'],{}],['two',['25m Backstroke','25m Freestyle'],{}],['four',['25m Freestyle','50m Freestyle','25m Backstroke','25m Breaststroke'],{}],['Under-6 spaces',['25m Freestyle Kick with Board'],{dob:'2021-05-01',floatersAcknowledged:'true'}],['relay plus four',['25m Freestyle','50m Freestyle','25m Backstroke','25m Breaststroke','4×50m Freestyle Relay'],{}],['array input',['25m Freestyle','25m Backstroke'],{events:['25m Freestyle','25m Backstroke']}],['fallback',['25m Freestyle'],{events:undefined,events_json:'["25m Freestyle"]'}],['plain string',['25m Freestyle'],{events:'25m Freestyle'}]];
   for(const [name,events,overrides] of cases)await t.test(name,async()=>{
     const body=payload(events,overrides),result=await submit(body);
     assert.equal(result.status,200,JSON.stringify(result.body));
@@ -73,7 +73,13 @@ test('registration JSONB integration',async t=>{
   for(const events of ['[broken','{"event":"25m Freestyle"}','null','12','[]','[null]','[["25m Freestyle"]]','["unknown"]','["25m Freestyle","25m Freestyle"]','["25m Freestyle","50m Freestyle","25m Backstroke","25m Breaststroke","25m Butterfly"]'])await t.test('reject '+events,async()=>{
     const before=await count('registrations');assert.equal((await submit(payload([],{events}))).status,400);assert.equal(await count('registrations'),before);
   });
-  for(const field of ['fullName','schoolName','dob','phone','idempotencyKey'])await t.test('required '+field,async()=>{assert.equal((await submit(payload(['25m Freestyle'],{[field]:' '}))).status,400)});
+  for(const field of ['fullName','schoolName','dob','phone','email','idempotencyKey'])await t.test('required '+field,async()=>{assert.equal((await submit(payload(['25m Freestyle'],{[field]:' '}))).status,400)});
+  for(const email of [undefined,'','not-an-email','parent@','parent@example','a b@example.com','parent@@example.com'])await t.test('reject invalid email '+String(email),async()=>{
+    const before=await count('registrations');const result=await submit(payload(['25m Freestyle'],{email}));assert.equal(result.status,400);assert.match(result.body.error,/email/i);assert.equal(await count('registrations'),before);
+  });
+  await t.test('required email is trimmed and saved',async()=>{
+    const result=await submit(payload(['25m Freestyle'],{email:' parent+swim@example.com '}));assert.equal(result.status,200);assert.equal((await query('SELECT email FROM registrations WHERE registration_id=$1',[result.body.registrationId])).rows[0].email,'parent+swim@example.com');
+  });
   for(const table of ['registrations','whatsapp_queue'])await t.test('rollback '+table,async()=>{
     const before=await count('registrations'),queued=await count('whatsapp_queue'),body=payload(['25m Freestyle']);
     failTable=table;let failed;try{failed=await submit(body)}finally{failTable=null}

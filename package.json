@@ -6,7 +6,9 @@
   "scripts": {
     "start": "node server.js",
     "test": "node --test",
-    "test:admin-ui": "node scripts/verify-admin.cjs"
+    "test:admin-ui": "node scripts/verify-admin.cjs",
+    "test:ticket-ui": "node scripts/verify-ticket.cjs",
+    "test:floaters-ui": "node scripts/verify-floaters.cjs"
   },
   "dependencies": {
     "connect-pg-simple": "^10.0.0",
@@ -19,6 +21,8 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.8",
-    "playwright": "^1.63.0"
+    "jsqr": "^1.4.0",
+    "playwright": "^1.63.0",
+    "pngjs": "^7.0.0"
   }
 }

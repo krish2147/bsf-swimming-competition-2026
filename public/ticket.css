@@ -1,0 +1,18 @@
+.ticket-page{background:#edf3f7}
+.ticket-page .ticket-shell{width:min(680px,calc(100% - 28px));margin:36px auto 56px}
+.ticket-intro{text-align:center;margin-bottom:26px}.ticket-intro h1{font-size:clamp(30px,5vw,42px);margin:8px 0 12px}.ticket-intro p{color:var(--muted);margin-bottom:8px}
+#ticket{margin:0;overflow:hidden;border-radius:16px;box-shadow:0 14px 44px #10273e1c;background:#fff}
+#ticketImage{display:block;width:100%;height:auto}
+.ticket-actions{display:flex;flex-wrap:wrap;gap:12px;margin:22px 0 14px}.ticket-actions button{flex:1 1 200px;min-height:50px}
+.ticket-actions [hidden]{display:none}.ticket-help{font-size:13px;text-align:center;color:var(--muted)}
+.ticket-wallets{padding-top:20px;border-top:1px solid var(--line);color:var(--muted);font-size:13px}.ticket-wallets p{margin:0 0 8px}.ticket-wallets p:first-child{font-weight:700;color:var(--text)}.ticket-wallets span{margin-left:8px;font-size:11px;background:#dfe9f1;padding:4px 8px;border-radius:12px}
+.ticket-accessible{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+#ticketStatus:empty{display:none}
+@page{size:A4 portrait;margin:12mm}
+@media print{
+ html,body.ticket-page{background:#fff!important;margin:0!important;padding:0!important}
+ .ticket-page nav,.ticket-intro,.ticket-actions,.ticket-help,.ticket-wallets,#ticketStatus{display:none!important}
+ .ticket-page .ticket-shell{width:100%;margin:0!important}
+ #ticket{box-shadow:none;border-radius:0;break-inside:avoid;width:100%;text-align:center}
+ #ticketImage{width:auto;height:auto;max-width:100%;max-height:268mm;margin:auto;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+}
