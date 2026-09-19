@@ -1,5 +1,5 @@
 const CATEGORIES=[
-{name:'Under-6',min:'2020-04-02',max:'9999-12-31',floaterEvents:['25m Freestyle Kick with Board','25m Freestyle'],eventLabels:{'25m Freestyle Kick with Board':'25m Freestyle Kick with Board / Floaters','25m Freestyle':'25m Freestyle with Floaters / 25m Freestyle'},events:['25m Freestyle Kick with Board','25m Freestyle']},
+{name:'Under-6',min:'2020-04-02',max:'9999-12-31',floaterEvents:['25m Freestyle Kick with Board','25m Freestyle'],eventLabels:{'25m Freestyle Kick with Board':'25m Freestyle Kick with Board / Floaters','25m Freestyle':'25-meter Freestyle with/without Floaters'},events:['25m Freestyle Kick with Board','25m Freestyle']},
 {name:'Under-8',min:'2018-04-02',max:'2020-04-01',events:['25m Freestyle Kick with Board','25m Freestyle','25m Backstroke','25m Breaststroke']},
 {name:'Under-10',min:'2016-04-02',max:'2018-04-01',events:['25m Freestyle','25m Backstroke','25m Breaststroke','25m Butterfly','50m Freestyle']},
 {name:'Under-12',min:'2014-04-02',max:'2016-04-01',events:['25m Freestyle','50m Freestyle','25m Backstroke','25m Breaststroke','25m Butterfly','100m Individual Medley (IM)','4×50m Freestyle Relay']},
