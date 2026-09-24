@@ -319,6 +319,21 @@ app.get('/api/admin/registrations/:registrationId',requireAdmin,async(req,res)=>
   res.json({...registration,ticketUrl,qrDataUrl});
 });
 
+app.delete('/api/admin/registrations/:registrationId',requireAdmin,async(req,res)=>{
+  const registrationId=String(req.params.registrationId||'').trim();
+  if(!registrationId)return res.status(400).json({error:'Registration ID is required.'});
+  const existing=(await q('SELECT registration_id,full_name FROM registrations WHERE registration_id=$1',[registrationId]))[0];
+  if(!existing)return res.status(404).json({error:'Registration not found.'});
+  await withTransaction(async c=>{
+    await c.query('DELETE FROM whatsapp_queue WHERE registration_id=$1',[registrationId]);
+    await c.query('DELETE FROM checkin_audit WHERE registration_id=$1',[registrationId]);
+    // timing_entries, result_entries and race_entries are removed by ON DELETE CASCADE.
+    await c.query('DELETE FROM registrations WHERE registration_id=$1',[registrationId]);
+  });
+  await audit('DELETE_REGISTRATION','registration',registrationId,{participant:existing.full_name},req.session.operator);
+  res.json({ok:true,registrationId});
+});
+
 app.get('/api/admin/payments',requireAdmin,async(req,res)=>{
   const rows=await q(`SELECT ${registrationColumns} FROM registrations ORDER BY created_at DESC,registration_id`);
   res.json(rows.map(registrationRow));
