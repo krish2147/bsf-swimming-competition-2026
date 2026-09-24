@@ -55,6 +55,16 @@ async function audit(action,type,key,details,operator){
   }catch(e){console.error('audit',e)}
 }
 
+// Convert upload/parser failures into clear registration errors instead of the generic 500 handler.
+app.use((err,req,res,next)=>{
+  if(err instanceof multer.MulterError){
+    if(err.code==='LIMIT_FILE_SIZE')return res.status(413).json({error:'Participant photo or payment screenshot is too large. Please choose an image up to 6 MB and try again.',code:'IMAGE_TOO_LARGE'});
+    return res.status(400).json({error:'The image upload could not be processed. Please choose the participant photo and payment screenshot again.',code:'IMAGE_UPLOAD_ERROR'});
+  }
+  if(err?.message==='Images only')return res.status(400).json({error:'Only image files are allowed for the participant photo and payment screenshot.',code:'IMAGE_TYPE_ERROR'});
+  next(err);
+});
+
 app.get('/health',async(req,res)=>{
   try{await pool.query('SELECT 1');res.json({ok:true,database:'postgres'})}
   catch(e){res.status(503).json({ok:false})}
