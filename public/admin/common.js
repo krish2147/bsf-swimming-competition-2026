@@ -11,7 +11,8 @@
     }
     return data;
   }
-  const post=(url,data)=>api(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});\n  const del=url=>api(url,{method:'DELETE'});
+  const post=(url,data)=>api(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+  const del=url=>api(url,{method:'DELETE'});
   async function authenticated(){const me=await api('/api/admin/me');if(!me.authenticated){location.assign('/admin/');return false}return true}
   function error(err){document.getElementById('adminError').textContent=err.message||'Request failed. Please retry.'}
   function run(fn){return async(...args)=>{document.getElementById('adminError').textContent='';try{return await fn(...args)}catch(err){error(err)}}}
