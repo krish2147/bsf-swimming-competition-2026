@@ -65,4 +65,4 @@ nav.co-branded-header .nav-cta{margin-left:0}
 .registration-page nav .brand,
 .registration-page nav a{color:var(--reg-ink)}
 .registration-page nav a{opacity:.72;transition:.25s ease}
-.registration-page nav a:hover{opacity:1;transform:translateY(-1px)}
+.registration-page nav a:hover{opacity:1;transform:translateY(-1px)}.checkin-scanner{margin-top:16px}.checkin-scanner-view{position:relative;width:min(420px,100%);aspect-ratio:1;background:#0b1a2a;border-radius:12px;overflow:hidden}.checkin-scanner-view video{width:100%;height:100%;object-fit:cover;display:block}.checkin-scanner-frame{position:absolute;inset:15%;border:3px solid #fff;border-radius:12px;box-shadow:0 0 0 999px #0b1a2a66}.checkin-scanner .row{margin-top:8px}
