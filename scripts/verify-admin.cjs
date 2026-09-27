@@ -5,6 +5,7 @@ const path=require('node:path');
 const fs=require('node:fs/promises');
 const os=require('node:os');
 const {start,close,query}=require('../test-support/admin-harness.cjs');
+const {writeQrCamera}=require('../test-support/fake-camera.cjs');
 (async()=>{
  const base=await start();let browser;
  const artifacts=process.env.ADMIN_TEST_ARTIFACTS||path.join(os.tmpdir(),'bsf-admin-verification');await fs.mkdir(artifacts,{recursive:true});
@@ -57,6 +58,38 @@ const {start,close,query}=require('../test-support/admin-harness.cjs');
    assert.deepEqual(errors,[],name+' console errors');assert.deepEqual(badResponses,[],name+' failed requests');
    console.log(`PASS ${name}: real form submission → PostgreSQL → admin list/search/filters → details/photo/proof → payment persisted → ticket → timings/results/check-in; no console/API errors`);
    await context.close();
+  }
+  // Check-in camera scanner: Chromium's fake webcam shows a real ticket QR (checkin URL), decoded in-page.
+  {
+   const scanned=(await query(`SELECT registration_id,ticket_token FROM registrations ORDER BY created_at LIMIT 1`)).rows[0];
+   const video=path.join(artifacts,'ticket-qr.y4m');await writeQrCamera(video,`https://bsf.example/admin/checkin.html?token=${scanned.ticket_token}`);
+   const executablePath=process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE;
+   const cameraBrowser=await chromium.launch({headless:true,...(executablePath?{executablePath}:{}),args:['--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream',`--use-file-for-fake-video-capture=${video}`]});
+   try{
+    const context=await cameraBrowser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,permissions:['camera']});context.setDefaultTimeout(15000);
+    const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+    await page.goto(base+'/admin/');await page.locator('#pin').fill('test-pin');await page.getByRole('button',{name:'Enter',exact:true}).click();await page.locator('#dash:not(.hidden)').waitFor();
+    await page.goto(base+'/admin/checkin.html');
+    assert.deepEqual(await page.evaluate(()=>['https://x.test/admin/checkin.html?token=0f8fad5b-d9cb-469f-a165-70867728950e','0F8FAD5B-D9CB-469F-A165-70867728950E','https://x.test/?token=nope','hello',''].map(CheckinScanner.tokenFromScan)),['0f8fad5b-d9cb-469f-a165-70867728950e','0F8FAD5B-D9CB-469F-A165-70867728950E',null,null,null]);
+    await page.getByRole('button',{name:'Scan QR',exact:true}).tap();
+    await page.waitForFunction(token=>document.getElementById('token').value===token,scanned.ticket_token);await page.locator('#reject').waitFor();
+    assert.ok(page.url().endsWith('?token='+scanned.ticket_token));assert.equal(await page.locator('#scanner').isHidden(),true);
+    assert.equal(await page.evaluate(()=>document.getElementById('scanVideo').srcObject),null,'camera released after scan');
+    await page.screenshot({path:path.join(artifacts,'scanner-ticket.png')});
+    await page.locator('#reason').fill('Scanner test');await page.locator('#reject').tap();await page.waitForFunction(()=>document.getElementById('checkinStatus').textContent==='Rejected');
+    assert.equal((await query('SELECT checkin_status FROM registrations WHERE registration_id=$1',[scanned.registration_id])).rows[0].checkin_status,'Rejected');
+    await page.getByRole('button',{name:'Scan next ticket',exact:true}).tap();await page.locator('#scanner:not(.hidden)').waitFor();assert.equal(await page.locator('#card').innerHTML(),'');
+    await page.locator('#reject').waitFor();await page.getByRole('button',{name:'Scan QR',exact:true}).tap();await page.locator('#scanner:not(.hidden)').waitFor();
+    await page.getByRole('button',{name:'Stop scanning',exact:true}).tap();await page.locator('#scanner').waitFor({state:'hidden'});
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    assert.deepEqual(errors,[],'scanner console errors');await context.close();
+    const denied=await cameraBrowser.newContext();
+    const deniedPage=await denied.newPage();await deniedPage.goto(base+'/admin/');await deniedPage.locator('#pin').fill('test-pin');await deniedPage.getByRole('button',{name:'Enter',exact:true}).click();await deniedPage.locator('#dash:not(.hidden)').waitFor();
+    await deniedPage.goto(base+'/admin/checkin.html');await deniedPage.evaluate(()=>{navigator.mediaDevices.getUserMedia=()=>Promise.reject(new DOMException('denied','NotAllowedError'))});await deniedPage.getByRole('button',{name:'Scan QR',exact:true}).click();
+    await deniedPage.waitForFunction(()=>document.getElementById('scanError').textContent.includes('Camera permission was blocked'));assert.equal(await deniedPage.locator('#scanner').isHidden(),true);assert.equal(await deniedPage.locator('#scanBtn').isEnabled(),true);
+    await denied.close();
+    console.log('PASS check-in scanner: fake camera QR → token → ticket opened → decision saved → scan next / stop; permission-denied message');
+   }finally{await cameraBrowser.close()}
   }
   // Hostile legacy strings must be inert on every desk, including the existing ticket.
   const legacy=(await query('SELECT registration_id,ticket_token FROM registrations LIMIT 1')).rows[0];

@@ -36,6 +36,8 @@ app.use(session({
   cookie:{httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production',maxAge:43200000}
 }));
 app.use(express.static(path.join(__dirname,'public')));
+// Self-hosted QR decoder for the check-in camera scanner (works without CDN access at the venue).
+app.get('/admin/vendor/jsQR.js',(req,res)=>res.sendFile(require.resolve('jsqr/dist/jsQR.js')));
 
 const requireAdmin=(req,res,next)=>req.session?.admin?next():res.status(401).json({error:'Admin login required'});
 const q=async(text,params=[])=>(await pool.query(text,params)).rows;
