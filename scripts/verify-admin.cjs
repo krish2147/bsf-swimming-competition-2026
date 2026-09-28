@@ -30,6 +30,13 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    assert.ok((await page.locator('#registrationRows').textContent()).includes('25m Backstroke'));
    for(const search of [id,participant,'Browser Test School','9988771122']){await page.locator('#registrationSearch').fill(search);await page.getByRole('button',{name:'Search / Filter'}).click();await page.getByRole('button',{name:id,exact:true}).waitFor()}
    await page.locator('#categoryFilter').selectOption('Under-12');await page.locator('#genderFilter').selectOption('Boys');await page.locator('#eventFilter').selectOption('25m Backstroke');await page.locator('#paymentFilter').selectOption('Pending');
+   {const [download]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Download CSV',exact:true}).click()]);
+    assert.match(download.suggestedFilename(),/^bsf-registrations-Under-12-Boys-25m-Backstroke-Pending-\d{4}-\d{2}-\d{2}\.csv$/);
+    const csv=await fs.readFile(await download.path(),'utf8'),lines=csv.replace(/^\uFEFF/,'').trim().split('\r\n');
+    assert.equal(lines[0],'Sr No,Registration ID,Participant,School,Gender,DOB,Age category,Events,Contact,Payment status,Check-in status');
+    const mine=lines.find(line=>line.includes(id));assert.ok(mine&&mine.includes(participant)&&mine.includes('25m Freestyle; 25m Backstroke')&&mine.includes(',Pending,'),'filtered CSV row');
+    assert.ok(lines.slice(1).every(line=>line.includes(',Boys,')&&line.includes(',Under-12,')&&line.includes('25m Backstroke')),'CSV only has filtered swimmers');
+    assert.equal(lines.length-1,Number((await page.locator('#registrationCount').textContent()).match(/\d+/)[0]),'CSV row count matches on-screen total');}
    await page.getByRole('button',{name:id,exact:true}).click();await page.locator('#participantDialog[open]').waitFor();assert.ok((await page.locator('#participantDialog').textContent()).includes(participant));
    await page.screenshot({path:path.join(artifacts,`${name}-details.png`)});
    for(const label of ['Participant photo','Payment proof']){

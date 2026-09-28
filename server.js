@@ -292,14 +292,9 @@ app.get('/api/admin/race-card',requireAdmin,async(req,res)=>{
   res.json({rows,heatCount:hc.c});
 });
 
-app.get('/api/admin/registrations',requireAdmin,async(req,res)=>{
-  const filters=req.query;
-  if(Object.keys(filters).some(key=>!['search','category','gender','event','paymentStatus','page','limit'].includes(key)))return res.status(400).json({error:'Unknown registration filter.'});
-  for(const key of ['search','category','gender','event','paymentStatus','page','limit']){
-    if(filters[key]!==undefined&&typeof filters[key]!=='string')return res.status(400).json({error:'Invalid registration filter.'});
-  }
-  const page=Number(filters.page||1),limit=Number(filters.limit||50);
-  if(!Number.isSafeInteger(page)||page<1||!Number.isInteger(limit)||limit<1||limit>100)return res.status(400).json({error:'Invalid page or limit.'});
+// Shared by the paged dashboard list and the CSV download so both always match the same filters.
+const registrationFilterKeys=['search','category','gender','event','paymentStatus'];
+async function filteredRegistrations(filters){
   const clauses=[],values=[];
   for(const [key,column] of [['category','age_category'],['gender','gender'],['paymentStatus','payment_status']]){
     if(filters[key]){values.push(filters[key]);clauses.push(`${column}=$${values.length}`)}
@@ -308,8 +303,39 @@ app.get('/api/admin/registrations',requireAdmin,async(req,res)=>{
     values.push(filters.search.trim());
     clauses.push(`strpos(lower(concat_ws(' ',registration_id,full_name,school_name,phone)),lower($${values.length}))>0`);
   }
-  const rows=(await q(`SELECT ${registrationColumns} FROM registrations ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY created_at DESC,registration_id`,values)).map(registrationRow).filter(r=>!filters.event||r.events_json.includes(filters.event));
+  return (await q(`SELECT ${registrationColumns} FROM registrations ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY created_at DESC,registration_id`,values)).map(registrationRow).filter(r=>!filters.event||r.events_json.includes(filters.event));
+}
+function invalidRegistrationFilters(filters,allowed){
+  if(Object.keys(filters).some(key=>!allowed.includes(key)))return 'Unknown registration filter.';
+  if(allowed.some(key=>filters[key]!==undefined&&typeof filters[key]!=='string'))return 'Invalid registration filter.';
+}
+app.get('/api/admin/registrations',requireAdmin,async(req,res)=>{
+  const filters=req.query,invalid=invalidRegistrationFilters(filters,[...registrationFilterKeys,'page','limit']);
+  if(invalid)return res.status(400).json({error:invalid});
+  const page=Number(filters.page||1),limit=Number(filters.limit||50);
+  if(!Number.isSafeInteger(page)||page<1||!Number.isInteger(limit)||limit<1||limit>100)return res.status(400).json({error:'Invalid page or limit.'});
+  const rows=await filteredRegistrations(filters);
   res.json({rows:rows.slice((page-1)*limit,page*limit),total:rows.length,page,limit});
+});
+
+// Spreadsheet export of the filtered list (e.g. one category/gender/event) for building heats.
+const csvCell=value=>{
+  let cell=String(value??'');
+  if(/^[=+\-@\t\r]/.test(cell))cell="'"+cell; // keep spreadsheet apps from running cell text as a formula
+  return /[",\r\n]/.test(cell)?`"${cell.replaceAll('"','""')}"`:cell;
+};
+app.get('/api/admin/registrations.csv',requireAdmin,async(req,res)=>{
+  const filters=req.query,invalid=invalidRegistrationFilters(filters,registrationFilterKeys);
+  if(invalid)return res.status(400).json({error:invalid});
+  const rows=await filteredRegistrations(filters);
+  const header=['Sr No','Registration ID','Participant','School','Gender','DOB','Age category','Events','Contact','Payment status','Check-in status'];
+  const lines=[header,...rows.map((r,i)=>[i+1,r.registration_id,r.full_name,r.school_name,r.gender,r.dob,r.age_category,r.events_json.join('; '),r.phone,r.payment_status,r.checkin_status])].map(line=>line.map(csvCell).join(','));
+  const label=[filters.category,filters.gender,filters.event,filters.paymentStatus].filter(Boolean).join('-').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'')||'all';
+  const stamp=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  await audit('export','registrations',null,{filters:Object.fromEntries(registrationFilterKeys.filter(k=>filters[k]).map(k=>[k,filters[k]])),count:rows.length},req.session.operator);
+  res.set('Content-Type','text/csv; charset=utf-8');
+  res.set('Content-Disposition',`attachment; filename="bsf-registrations-${label}-${stamp}.csv"`);
+  res.send('\uFEFF'+lines.join('\r\n')+'\r\n');
 });
 
 app.get('/api/admin/registrations/:registrationId',requireAdmin,async(req,res)=>{
