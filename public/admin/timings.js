@@ -19,3 +19,42 @@ document.getElementById('list').addEventListener('click',run(async e=>{
 }));
 eventSelect.addEventListener('change',()=>{document.getElementById('list').replaceChildren();heatInfo.textContent='';heat.value=1});
 run(async()=>{if(!await Admin.authenticated())return;const events=await api('/api/admin/events');eventSelect.innerHTML='<option value="">Select event</option>'+events.map(e=>`<option value="${esc(e.key)}">${text(e.category)} • ${text(e.gender)} • ${text(e.event)} (${e.count})</option>`).join('')})();
+
+// CSV heat import: download the event's swimmers, fill Heat/Lane in Excel (optional), preview, then save.
+const csvInput=document.getElementById('heatCsv'),preview=document.getElementById('heatPreview');
+let previewed=null;
+const clearPreview=()=>{previewed=null;preview.replaceChildren()};
+const importUrl=dryRun=>`/api/admin/import-heats?${new URLSearchParams({eventKey:eventSelect.value,lanes:lanes.value,dryRun:dryRun?'1':'0'})}`;
+async function sendHeats(csv,dryRun){
+ const response=await fetch(importUrl(dryRun),{method:'POST',headers:{'Content-Type':'text/csv'},body:csv});
+ const data=await response.json().catch(()=>({error:'Invalid server response. Please retry.'}));
+ if(response.status===401)location.assign('/admin/');
+ return {ok:response.ok,data};
+}
+const missingNote=missing=>missing.length?`<p class="notice">${missing.length} swimmer(s) registered for this event are not in the CSV and will not be placed in any heat: ${missing.map(m=>`${esc(m.fullName)} (${esc(m.registrationId)})`).join(', ')}</p>`:'';
+document.getElementById('downloadEventCsv').onclick=run(async()=>{
+ if(!eventSelect.value)throw Error('Select an event first.');
+ const [category,gender,event]=eventSelect.value.split('|||');
+ await Admin.download('/api/admin/registrations.csv?'+new URLSearchParams({category,gender,event}),'bsf-heats.csv');
+});
+document.getElementById('previewHeats').onclick=run(async()=>{
+ clearPreview();
+ if(!eventSelect.value)throw Error('Select an event first.');
+ const file=csvInput.files[0];if(!file)throw Error('Choose the CSV file to upload.');
+ const csv=await file.text(),{ok,data}=await sendHeats(csv,true);
+ if(!ok){preview.innerHTML=`<div class="notice admin-error"><b>${esc(data.error||'Import failed.')}</b>${data.errors?.length?`<ul>${data.errors.map(e=>`<li>${esc(e)}</li>`).join('')}</ul>`:''}</div>`;return}
+ previewed={csv,eventKey:eventSelect.value};
+ const heats=[...new Set(data.entries.map(e=>e.heatNo))];
+ preview.innerHTML=`<p><b>${data.participants} swimmer(s) in ${data.heats} heat(s)</b> — ${data.mode==='csv'?'using the Heat and Lane columns from the CSV':`arranged in CSV row order, ${esc(lanes.value)} lanes per heat`}.</p>${missingNote(data.missing)}${heats.map(h=>`<h3>Heat ${h}</h3><div class="admin-table-scroll"><table data-preview-heat="${h}"><thead><tr><th>Lane</th><th>Swimmer</th><th>School</th><th>Registration ID</th></tr></thead><tbody>${data.entries.filter(e=>e.heatNo===h).map(e=>`<tr><td>${e.laneNo}</td><td>${text(e.fullName)}</td><td>${text(e.schoolName)}</td><td>${text(e.registrationId)}</td></tr>`).join('')}</tbody></table></div>`).join('')}<div class="row"><button type="button" class="good" id="saveHeats">Save these heats</button><button type="button" class="secondary" id="cancelHeats">Cancel</button></div>`;
+ document.getElementById('cancelHeats').onclick=clearPreview;
+ document.getElementById('saveHeats').onclick=run(async()=>{
+  if(!previewed||previewed.eventKey!==eventSelect.value)throw Error('Preview the CSV again before saving.');
+  if(!confirm('Save these heats? Existing heat assignments for this event will be replaced.'))return;
+  const {ok,data}=await sendHeats(previewed.csv,false);
+  if(!ok)throw Error([data.error,...(data.errors||[])].filter(Boolean).join(' '));
+  clearPreview();csvInput.value='';heat.value=1;await loadHeat();
+  heatInfo.textContent=`Imported from CSV: ${data.participants} swimmers in ${data.heats} heat(s). Showing heat 1.`;
+ });
+});
+for(const input of [csvInput,lanes])input.addEventListener('change',clearPreview);
+eventSelect.addEventListener('change',clearPreview);

@@ -33,7 +33,7 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    {const [download]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Download CSV',exact:true}).click()]);
     assert.match(download.suggestedFilename(),/^bsf-registrations-Under-12-Boys-25m-Backstroke-Pending-\d{4}-\d{2}-\d{2}\.csv$/);
     const csv=await fs.readFile(await download.path(),'utf8'),lines=csv.replace(/^\uFEFF/,'').trim().split('\r\n');
-    assert.equal(lines[0],'Sr No,Registration ID,Participant,School,Gender,DOB,Age category,Events,Contact,Payment status,Check-in status');
+    assert.equal(lines[0],'Sr No,Registration ID,Participant,School,Gender,DOB,Age category,Events,Contact,Payment status,Check-in status,Heat,Lane');
     const mine=lines.find(line=>line.includes(id));assert.ok(mine&&mine.includes(participant)&&mine.includes('25m Freestyle; 25m Backstroke')&&mine.includes(',Pending,'),'filtered CSV row');
     assert.ok(lines.slice(1).every(line=>line.includes(',Boys,')&&line.includes(',Under-12,')&&line.includes('25m Backstroke')),'CSV only has filtered swimmers');
     assert.equal(lines.length-1,Number((await page.locator('#registrationCount').textContent()).match(/\d+/)[0]),'CSV row count matches on-screen total');}
@@ -56,6 +56,14 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    await page.reload();assert.equal(await page.locator(`[data-payment-label="${id}"]`).textContent(),'Issue');
    console.log(name+': details/media/payment persistence verified');
    await page.goto(base+'/admin/timings.html');const key='Under-12|||Boys|||25m Freestyle';await page.locator('#event option').filter({hasText:'25m Freestyle ('}).waitFor({state:'attached'});await page.locator('#event').selectOption(key);
+   {const [download]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Download swimmers CSV',exact:true}).click()]);
+    const csv=await fs.readFile(await download.path(),'utf8');assert.ok(csv.split('\r\n')[0].endsWith(',Heat,Lane')&&csv.includes(id),'event CSV has Heat/Lane columns and this swimmer');
+    await page.locator('#heatCsv').setInputFiles({name:'heats.csv',mimeType:'text/csv',buffer:Buffer.from(csv)});await page.locator('#lanes').fill('4');
+    await page.getByRole('button',{name:'Preview heats',exact:true}).click();await page.locator('[data-preview-heat="1"]').waitFor();
+    assert.ok((await page.locator('#heatPreview').textContent()).includes(participant));await page.screenshot({path:path.join(artifacts,`${name}-heat-import-preview.png`),fullPage:true});
+    page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Save these heats',exact:true}).click();
+    await page.waitForFunction(()=>document.getElementById('heatInfo').textContent.startsWith('Imported from CSV'));await page.locator(`[data-timing-row="${id}"]`).waitFor();
+    assert.equal(await page.locator('#heatPreview').innerHTML(),'');assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}
    page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Create / Reset Heats'}).click();await page.locator('[data-timing-row]').first().waitFor();
    const timing=page.locator(`[data-timing-row="${id}"]`);await timing.locator('.timing-value').fill('00:36.42');await timing.getByRole('button',{name:'Save',exact:true}).click();await page.waitForFunction(id=>document.querySelector(`[data-timing-row="${id}"] .timing-state`)?.textContent==='Saved ✓',id);
    await page.goto(base+'/admin/results.html');await page.waitForFunction(()=>document.getElementById('event').options.length>1);await page.locator('#event').selectOption(key);await page.locator('#p1').selectOption(id);await page.locator('[data-position="1"]').click();await page.waitForFunction(()=>document.getElementById('msg').textContent==='Saved privately.');
