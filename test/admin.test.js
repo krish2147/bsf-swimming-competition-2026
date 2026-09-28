@@ -22,7 +22,7 @@ test('admin end-to-end API regression',async t=>{
   const gets=['/api/admin/overview','/api/admin/events','/api/admin/registrations','/api/admin/registrations/'+id,'/api/admin/event-participants?eventKey='+encodeURIComponent(key),'/api/admin/payments','/api/admin/checkin/'+token,'/api/admin/timings','/api/admin/results','/api/admin/race-card','/api/admin/audit'];
   for(const url of gets)assert.equal((await api(url,null,false)).status,401,url);
   for(const url of ['/api/admin/payment-status','/api/admin/timing','/api/admin/result','/api/admin/publish-event','/api/admin/unpublish-event','/api/admin/checkin/'+token,'/api/admin/seed-heats'])assert.equal((await api(url,{},false)).status,401,url);
-  assert.equal((await fetch(base+'/api/admin/import-heats?eventKey='+encodeURIComponent(key),{method:'POST',headers:{'Content-Type':'text/csv'},body:'Registration ID\n'+id})).status,401);
+  assert.equal((await api('/api/admin/heat-builder?eventKey='+encodeURIComponent(key),null,false)).status,401);assert.equal((await api('/api/admin/save-heats',{eventKey:key,entries:[]},false)).status,401);
   for(const kind of ['photo','proof'])assert.equal((await fetch(base+`/api/media/${id}/${kind}`)).status,401);
   assert.equal((await api('/api/admin/login',{pin:'wrong'},false)).status,403);
  });
@@ -84,25 +84,24 @@ test('admin end-to-end API regression',async t=>{
   assert.equal((await api('/api/admin/results?eventKey='+encodeURIComponent(key))).body.entries[0].registration_id,id);
   assert.equal((await api('/api/admin/checkin/'+token,{decision:'Approved'})).status,200);assert.equal((await api('/api/admin/overview')).body.checkedIn,1);
  });
- await t.test('heats import from the dashboard CSV: preview, exact Heat/Lane, errors save nothing',async()=>{
+ await t.test('heat builder: swimmers with status and saved slots; save validates and replaces heats',async()=>{
   const second=await register({fullName:'Second Freestyler'}),third=await register({fullName:'Third Freestyler'});
-  const csv=async(params,body)=>{const response=await fetch(base+'/api/admin/import-heats?'+new URLSearchParams({eventKey:key,...params}),{method:'POST',headers:{cookie,'Content-Type':'text/csv'},body});return {status:response.status,body:await response.json()}};
-  const exported=await fetch(base+'/api/admin/registrations.csv?'+new URLSearchParams({category:'Under-12',gender:'Boys',event:'25m Freestyle'}),{headers:{cookie}});
-  const lines=(await exported.text()).replace(/^﻿/,'').trim().split('\r\n');assert.ok(lines[0].endsWith(',Heat,Lane'));
-  const before=(await query('SELECT registration_id,heat_no,lane_no FROM race_entries WHERE event_key=$1 ORDER BY registration_id',[key])).rows;
-  const preview=await csv({lanes:'2',dryRun:'1'},lines.join('\r\n'));
-  assert.equal(preview.status,200);assert.equal(preview.body.mode,'auto');assert.equal(preview.body.participants,lines.length-1);assert.equal(preview.body.heats,Math.ceil((lines.length-1)/2));
-  assert.deepEqual((await query('SELECT registration_id,heat_no,lane_no FROM race_entries WHERE event_key=$1 ORDER BY registration_id',[key])).rows,before,'dry run does not save');
-  const exact=`Registration ID,Heat,Lane\n${third.registrationId},1,4\n${id},1,3\n${second.registrationId},2,3\n`;
-  const saved=await csv({dryRun:'0'},exact);assert.equal(saved.status,200);assert.equal(saved.body.mode,'csv');assert.equal(saved.body.heats,2);
+  const load=async()=>(await api('/api/admin/heat-builder?eventKey='+encodeURIComponent(key))).body.swimmers;
+  const swimmers=await load();
+  assert.deepEqual(swimmers.map(s=>s.registrationId).filter(s=>[id,second.registrationId,third.registrationId].includes(s)).length,3);
+  assert.ok(swimmers.every(s=>'paymentStatus' in s&&'checkinStatus' in s));assert.ok(!swimmers.some(s=>s.fullName==='Other Event'||s.fullName==='Other Gender'));
+  assert.equal(swimmers.find(s=>s.registrationId===id).heatNo,1,'shows the slot saved by seed-heats');
+  const saved=await api('/api/admin/save-heats',{eventKey:key,entries:[{registrationId:third.registrationId,heatNo:1,laneNo:4},{registrationId:id,heatNo:1,laneNo:3},{registrationId:second.registrationId,heatNo:2,laneNo:3}]});
+  assert.equal(saved.status,200);assert.equal(saved.body.heats,2);assert.equal(saved.body.participants,3);
   assert.deepEqual((await query('SELECT registration_id,heat_no,lane_no FROM race_entries WHERE event_key=$1 ORDER BY heat_no,lane_no',[key])).rows,[{registration_id:id,heat_no:1,lane_no:3},{registration_id:third.registrationId,heat_no:1,lane_no:4},{registration_id:second.registrationId,heat_no:2,lane_no:3}]);
+  const after=await load();assert.deepEqual([after.find(s=>s.registrationId===second.registrationId).heatNo,after.find(s=>s.registrationId===second.registrationId).laneNo],[2,3]);
   const card=await api('/api/admin/race-card?'+new URLSearchParams({eventKey:key,heatNo:'1'}));assert.deepEqual(card.body.rows.map(r=>r.lane_no),[3,4]);assert.equal(card.body.heatCount,2);
   const other=(await query("SELECT registration_id FROM registrations WHERE full_name='Other Event'")).rows[0].registration_id;
-  const bad=await csv({dryRun:'0'},`Registration ID,Heat,Lane\n${id},1,1\n${other},1,2\n`);
-  assert.equal(bad.status,400);assert.ok(bad.body.errors.some(e=>e.includes('is not registered for this event')),JSON.stringify(bad.body));
-  assert.equal((await query('SELECT COUNT(*)::int n FROM race_entries WHERE event_key=$1',[key])).rows[0].n,3,'failed import keeps existing heats');
-  assert.equal((await csv({dryRun:'1'},'')).status,400);
-  assert.equal((await fetch(base+'/api/admin/import-heats?eventKey=bad',{method:'POST',headers:{cookie,'Content-Type':'text/csv'},body:'Registration ID\n'+id})).status,400);
-  assert.equal((await query("SELECT COUNT(*)::int n FROM admin_audit WHERE action='IMPORT_HEATS' AND entity_key=$1",[key])).rows[0].n,1);
+  for(const entries of [[{registrationId:other,heatNo:1,laneNo:1}],[{registrationId:id,heatNo:1,laneNo:1},{registrationId:third.registrationId,heatNo:1,laneNo:1}],[],'bad']){
+   const bad=await api('/api/admin/save-heats',{eventKey:key,entries});assert.equal(bad.status,400,JSON.stringify(entries));assert.ok(bad.body.errors.length);
+  }
+  assert.equal((await query('SELECT COUNT(*)::int n FROM race_entries WHERE event_key=$1',[key])).rows[0].n,3,'failed saves keep existing heats');
+  assert.equal((await api('/api/admin/save-heats',{eventKey:'bad',entries:[]})).status,400);assert.equal((await api('/api/admin/heat-builder?eventKey=bad')).status,400);
+  assert.equal((await query("SELECT COUNT(*)::int n FROM admin_audit WHERE action='SAVE_HEATS' AND entity_key=$1",[key])).rows[0].n,1);
  });
 });

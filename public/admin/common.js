@@ -28,7 +28,8 @@
   const details=modal('participantDialog','Participant details'),lightbox=modal('mediaDialog','Registration image');
   function media(url,label){return url?`<button type="button" class="admin-media-button" data-image="${escape(url)}" data-label="${escape(label)}" aria-label="Enlarge ${escape(label)}"><img src="${escape(url)}" alt="${escape(label)}" loading="lazy"></button>`:`<p class="muted">${escape(label)} unavailable</p>`}
   document.addEventListener('error',e=>{if(e.target.tagName==='IMG'&&e.target.closest('.admin-media-button')){const button=e.target.closest('button');button.disabled=true;button.textContent=e.target.alt+' unavailable'}},true);
-  document.addEventListener('click',run(async e=>{
+  // Only photo/participant clicks run here: wrapping every click in run() would clear other errors as they appear.
+  const openFromClick=run(async e=>{
     const button=e.target.closest('[data-image]');
     if(button){
       const image=document.createElement('img');image.src=button.dataset.image;image.alt=button.dataset.label;
@@ -37,7 +38,8 @@
     }
     const participant=e.target.closest('[data-participant]');
     if(participant)await openParticipant(participant.dataset.participant);
-  }));
+  });
+  document.addEventListener('click',e=>{if(e.target.closest('[data-image],[data-participant]'))openFromClick(e)});
   async function openParticipant(id){
     const r=await api('/api/admin/registrations/'+encodeURIComponent(id));
     const fields=[['Registration ID',r.registration_id],['Participant',r.full_name],['School',r.school_name],['Gender',r.gender],['DOB',r.dob],['Category',r.age_category],['Contact',r.phone],['Email',r.email],['Guardian',r.guardian_name],['Registered (IST)',date(r.created_at)],['Amount',r.amount==null?null:'₹'+r.amount],['UTR',r.payment_utr],['Check-in',r.checkin_status]];
