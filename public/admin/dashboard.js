@@ -26,6 +26,11 @@ document.getElementById('pin').addEventListener('keydown',e=>{if(e.key==='Enter'
 filters.addEventListener('submit',run(async e=>{e.preventDefault();page=1;await loadRegistrations()}));
 filters.addEventListener('change',run(async()=>{page=1;await loadRegistrations()}));
 filters.addEventListener('reset',()=>setTimeout(run(async()=>{page=1;await loadRegistrations()}),0));
+// Downloads every registration matching the current filters (all pages), e.g. one event's swimmers for heats.
+document.getElementById('downloadCsv').onclick=run(async()=>{
+  const params=new URLSearchParams([...new FormData(filters)].filter(([,value])=>value));
+  await Admin.download('/api/admin/registrations.csv?'+params,'bsf-registrations.csv');
+});
 document.getElementById('previousPage').onclick=run(async()=>{page--;await loadRegistrations()});
 document.getElementById('nextPage').onclick=run(async()=>{page++;await loadRegistrations()});
 document.addEventListener('admin-payment-updated',run(async()=>{await Promise.all([overview(),loadRegistrations()])}));

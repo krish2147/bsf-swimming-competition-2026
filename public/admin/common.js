@@ -66,5 +66,13 @@
     };
     if(!details.open)details.showModal();
   }
-  window.Admin={escape,text,date,api,post,del,authenticated,run,error,media,openParticipant};
+  // Saves an admin CSV/file response, keeping API errors in the admin error bar instead of a blank page.
+  async function download(url,fallbackName){
+    const response=await fetch(url);
+    if(!response.ok){if(response.status===401)location.assign('/admin/');throw new Error((await response.json().catch(()=>({}))).error||'Download failed. Please retry.')}
+    const name=/filename="([^"]+)"/.exec(response.headers.get('Content-Disposition')||'')?.[1]||fallbackName;
+    const link=Object.assign(document.createElement('a'),{href:URL.createObjectURL(await response.blob()),download:name});
+    document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+  }
+  window.Admin={escape,text,date,api,post,del,authenticated,run,error,media,openParticipant,download};
 })();

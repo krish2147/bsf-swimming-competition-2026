@@ -9,6 +9,7 @@ const {pool,initDb,withTransaction}=require('./src/db');
 const {CATEGORIES,categoryForDob,eventKey,parseEventKey}=require('./src/competition');
 
 const {registrationEvents,registrationRow,registrationColumns}=require('./src/admin-data');
+const {planHeats}=require('./src/heat-import');
 const {requiresFloaters}=require('./public/floater-policy');
 
 const app=express();
@@ -285,6 +286,29 @@ app.post('/api/admin/seed-heats',requireAdmin,async(req,res)=>{
   res.json({ok:true,participants:regs.length,heats:Math.ceil(regs.length/lanes)});
 });
 
+// Heats from an uploaded CSV (the dashboard export). Uses Heat/Lane columns when filled, otherwise row order.
+// ?dryRun=1 only validates and returns the preview; saving replaces the event's existing heat assignments.
+app.post('/api/admin/import-heats',requireAdmin,express.text({type:['text/csv','text/plain'],limit:'2mb'}),async(req,res)=>{
+  const ek=req.query.eventKey,lanes=Number(req.query.lanes||6),dryRun=req.query.dryRun==='1';
+  if(!validEventKey(ek))return res.status(400).json({error:'Select a valid event first.'});
+  if(typeof req.body!=='string'||!req.body.trim())return res.status(400).json({error:'Choose a CSV file to upload.'});
+  const {category,gender,event}=parseEventKey(ek);
+  const all=await q('SELECT registration_id,full_name,school_name,age_category,gender,events_json FROM registrations ORDER BY created_at,full_name');
+  const eventRegistrations=all.filter(r=>r.age_category===category&&r.gender===gender&&registrationEvents(r.events_json).includes(event));
+  const plan=planHeats(req.body,{lanes,eventRegistrations,knownRegistrations:new Map(all.map(r=>[r.registration_id,r]))});
+  const swimmer=r=>({registrationId:r.registration_id,fullName:r.full_name,schoolName:r.school_name});
+  const summary={mode:plan.mode,participants:plan.entries.length,heats:new Set(plan.entries.map(e=>e.heat_no)).size,
+    entries:plan.entries.map(e=>({heatNo:e.heat_no,laneNo:e.lane_no,...swimmer(e.reg)})),missing:plan.missing.map(swimmer)};
+  if(plan.errors.length)return res.status(400).json({error:'The CSV has problems. Fix them and upload again.',errors:plan.errors,missing:summary.missing});
+  if(dryRun)return res.json({ok:true,dryRun:true,...summary});
+  await withTransaction(async c=>{
+    await c.query('DELETE FROM race_entries WHERE event_key=$1',[ek]);
+    for(const e of plan.entries)await c.query('INSERT INTO race_entries(event_key,heat_no,lane_no,registration_id) VALUES($1,$2,$3,$4)',[ek,e.heat_no,e.lane_no,e.reg.registration_id]);
+  });
+  await audit('IMPORT_HEATS','event',ek,{participants:summary.participants,heats:summary.heats,mode:plan.mode,lanes:plan.mode==='auto'?lanes:null,missing:summary.missing.map(m=>m.registrationId)},req.session.operator);
+  res.json({ok:true,...summary});
+});
+
 app.get('/api/admin/race-card',requireAdmin,async(req,res)=>{
   const ek=req.query.eventKey,heat=Number(req.query.heatNo||1);
   const rows=await q(`SELECT re.heat_no,re.lane_no,r.registration_id,r.full_name,r.school_name,te.timing_text,te.status,te.updated_at FROM race_entries re JOIN registrations r ON r.registration_id=re.registration_id LEFT JOIN timing_entries te ON te.event_key=re.event_key AND te.heat_no=re.heat_no AND te.registration_id=re.registration_id WHERE re.event_key=$1 AND re.heat_no=$2 ORDER BY re.lane_no`,[ek,heat]);
@@ -292,14 +316,9 @@ app.get('/api/admin/race-card',requireAdmin,async(req,res)=>{
   res.json({rows,heatCount:hc.c});
 });
 
-app.get('/api/admin/registrations',requireAdmin,async(req,res)=>{
-  const filters=req.query;
-  if(Object.keys(filters).some(key=>!['search','category','gender','event','paymentStatus','page','limit'].includes(key)))return res.status(400).json({error:'Unknown registration filter.'});
-  for(const key of ['search','category','gender','event','paymentStatus','page','limit']){
-    if(filters[key]!==undefined&&typeof filters[key]!=='string')return res.status(400).json({error:'Invalid registration filter.'});
-  }
-  const page=Number(filters.page||1),limit=Number(filters.limit||50);
-  if(!Number.isSafeInteger(page)||page<1||!Number.isInteger(limit)||limit<1||limit>100)return res.status(400).json({error:'Invalid page or limit.'});
+// Shared by the paged dashboard list and the CSV download so both always match the same filters.
+const registrationFilterKeys=['search','category','gender','event','paymentStatus'];
+async function filteredRegistrations(filters){
   const clauses=[],values=[];
   for(const [key,column] of [['category','age_category'],['gender','gender'],['paymentStatus','payment_status']]){
     if(filters[key]){values.push(filters[key]);clauses.push(`${column}=$${values.length}`)}
@@ -308,8 +327,39 @@ app.get('/api/admin/registrations',requireAdmin,async(req,res)=>{
     values.push(filters.search.trim());
     clauses.push(`strpos(lower(concat_ws(' ',registration_id,full_name,school_name,phone)),lower($${values.length}))>0`);
   }
-  const rows=(await q(`SELECT ${registrationColumns} FROM registrations ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY created_at DESC,registration_id`,values)).map(registrationRow).filter(r=>!filters.event||r.events_json.includes(filters.event));
+  return (await q(`SELECT ${registrationColumns} FROM registrations ${clauses.length?'WHERE '+clauses.join(' AND '):''} ORDER BY created_at DESC,registration_id`,values)).map(registrationRow).filter(r=>!filters.event||r.events_json.includes(filters.event));
+}
+function invalidRegistrationFilters(filters,allowed){
+  if(Object.keys(filters).some(key=>!allowed.includes(key)))return 'Unknown registration filter.';
+  if(allowed.some(key=>filters[key]!==undefined&&typeof filters[key]!=='string'))return 'Invalid registration filter.';
+}
+app.get('/api/admin/registrations',requireAdmin,async(req,res)=>{
+  const filters=req.query,invalid=invalidRegistrationFilters(filters,[...registrationFilterKeys,'page','limit']);
+  if(invalid)return res.status(400).json({error:invalid});
+  const page=Number(filters.page||1),limit=Number(filters.limit||50);
+  if(!Number.isSafeInteger(page)||page<1||!Number.isInteger(limit)||limit<1||limit>100)return res.status(400).json({error:'Invalid page or limit.'});
+  const rows=await filteredRegistrations(filters);
   res.json({rows:rows.slice((page-1)*limit,page*limit),total:rows.length,page,limit});
+});
+
+// Spreadsheet export of the filtered list (e.g. one category/gender/event) for building heats.
+const csvCell=value=>{
+  let cell=String(value??'');
+  if(/^[=+\-@\t\r]/.test(cell))cell="'"+cell; // keep spreadsheet apps from running cell text as a formula
+  return /[",\r\n]/.test(cell)?`"${cell.replaceAll('"','""')}"`:cell;
+};
+app.get('/api/admin/registrations.csv',requireAdmin,async(req,res)=>{
+  const filters=req.query,invalid=invalidRegistrationFilters(filters,registrationFilterKeys);
+  if(invalid)return res.status(400).json({error:invalid});
+  const rows=await filteredRegistrations(filters);
+  const header=['Sr No','Registration ID','Participant','School','Gender','DOB','Age category','Events','Contact','Payment status','Check-in status','Heat','Lane'];
+  const lines=[header,...rows.map((r,i)=>[i+1,r.registration_id,r.full_name,r.school_name,r.gender,r.dob,r.age_category,r.events_json.join('; '),r.phone,r.payment_status,r.checkin_status,'',''])].map(line=>line.map(csvCell).join(','));
+  const label=[filters.category,filters.gender,filters.event,filters.paymentStatus].filter(Boolean).join('-').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'')||'all';
+  const stamp=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  await audit('export','registrations',null,{filters:Object.fromEntries(registrationFilterKeys.filter(k=>filters[k]).map(k=>[k,filters[k]])),count:rows.length},req.session.operator);
+  res.set('Content-Type','text/csv; charset=utf-8');
+  res.set('Content-Disposition',`attachment; filename="bsf-registrations-${label}-${stamp}.csv"`);
+  res.send('\uFEFF'+lines.join('\r\n')+'\r\n');
 });
 
 app.get('/api/admin/registrations/:registrationId',requireAdmin,async(req,res)=>{
