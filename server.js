@@ -374,6 +374,22 @@ app.get('/api/admin/registrations/:registrationId',requireAdmin,async(req,res)=>
   res.json({...registration,ticketUrl,qrDataUrl});
 });
 
+// Correct a participant's name or school (e.g. a parent's typo). Ticket, check-in, heats and results read these live.
+app.post('/api/admin/registrations/:registrationId/details',requireAdmin,async(req,res)=>{
+  const registrationId=String(req.params.registrationId||'').trim(),{fullName,schoolName}=req.body||{};
+  const clean=value=>typeof value==='string'?value.trim().replace(/\s+/g,' '):'';
+  const next={full_name:clean(fullName),school_name:clean(schoolName)};
+  if(!next.full_name||!next.school_name)return res.status(400).json({error:'Participant name and school are required.'});
+  if(next.full_name.length>120||next.school_name.length>120)return res.status(400).json({error:'Name and school must be 120 characters or fewer.'});
+  const existing=(await q('SELECT full_name,school_name FROM registrations WHERE registration_id=$1',[registrationId]))[0];
+  if(!existing)return res.status(404).json({error:'Registration not found.'});
+  const changes=Object.fromEntries(Object.entries(next).filter(([key,value])=>existing[key]!==value).map(([key,value])=>[key,{from:existing[key],to:value}]));
+  if(!Object.keys(changes).length)return res.json({ok:true,changed:false,fullName:next.full_name,schoolName:next.school_name});
+  await q('UPDATE registrations SET full_name=$1,school_name=$2 WHERE registration_id=$3',[next.full_name,next.school_name,registrationId]);
+  await audit('EDIT_REGISTRATION','registration',registrationId,changes,req.session.operator);
+  res.json({ok:true,changed:true,fullName:next.full_name,schoolName:next.school_name});
+});
+
 app.delete('/api/admin/registrations/:registrationId',requireAdmin,async(req,res)=>{
   const registrationId=String(req.params.registrationId||'').trim();
   if(!registrationId)return res.status(400).json({error:'Registration ID is required.'});

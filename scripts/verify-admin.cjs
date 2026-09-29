@@ -79,6 +79,24 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    console.log(`PASS ${name}: real form submission → PostgreSQL → admin list/search/filters → details/photo/proof → payment persisted → ticket → timings/results/check-in; no console/API errors`);
    await context.close();
   }
+  // Edit participant details from the dashboard's participant dialog (phone-sized screen).
+  {
+   const target=(await query("SELECT registration_id FROM registrations WHERE full_name='Browser mobile Swimmer'")).rows[0].registration_id;
+   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});context.setDefaultTimeout(15000);
+   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+   await page.goto(base+'/admin/');await page.locator('#pin').fill('test-pin');await page.getByRole('button',{name:'Enter',exact:true}).click();
+   await page.getByRole('button',{name:target,exact:true}).tap();await page.locator('#participantDialog[open]').waitFor();
+   await page.getByLabel('Participant name',{exact:true}).fill('');await page.getByRole('button',{name:'Save changes',exact:true}).tap();
+   await page.waitForFunction(()=>document.getElementById('editMessage').textContent.includes('required'));
+   await page.getByLabel('Participant name',{exact:true}).fill('Aarna Sawant');await page.getByRole('button',{name:'Save changes',exact:true}).tap();
+   await page.waitForFunction(()=>document.getElementById('editMessage').textContent.startsWith('Saved.'));
+   assert.ok((await page.locator('#participantDialog .admin-details').textContent()).includes('Aarna Sawant'));
+   await page.screenshot({path:path.join(artifacts,'edit-details.png')});
+   await page.getByRole('button',{name:'Close participant details'}).tap();await page.waitForFunction(()=>document.getElementById('registrationRows').textContent.includes('Aarna Sawant'));
+   assert.equal((await query('SELECT full_name FROM registrations WHERE registration_id=$1',[target])).rows[0].full_name,'Aarna Sawant');
+   assert.deepEqual(errors,[],'edit details console errors');await context.close();
+   console.log('PASS edit participant name: validation message, saved, dialog + list refreshed, database updated');
+  }
   // Check-in camera scanner: Chromium's fake webcam shows a real ticket QR (checkin URL), decoded in-page.
   {
    const scanned=(await query(`SELECT registration_id,ticket_token FROM registrations ORDER BY created_at LIMIT 1`)).rows[0];

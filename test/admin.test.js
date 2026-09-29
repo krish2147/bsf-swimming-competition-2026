@@ -23,6 +23,7 @@ test('admin end-to-end API regression',async t=>{
   for(const url of gets)assert.equal((await api(url,null,false)).status,401,url);
   for(const url of ['/api/admin/payment-status','/api/admin/timing','/api/admin/result','/api/admin/publish-event','/api/admin/unpublish-event','/api/admin/checkin/'+token,'/api/admin/seed-heats'])assert.equal((await api(url,{},false)).status,401,url);
   assert.equal((await api('/api/admin/heat-builder?eventKey='+encodeURIComponent(key),null,false)).status,401);assert.equal((await api('/api/admin/save-heats',{eventKey:key,entries:[]},false)).status,401);
+  assert.equal((await api('/api/admin/registrations/'+id+'/details',{fullName:'X',schoolName:'Y'},false)).status,401);
   for(const kind of ['photo','proof'])assert.equal((await fetch(base+`/api/media/${id}/${kind}`)).status,401);
   assert.equal((await api('/api/admin/login',{pin:'wrong'},false)).status,403);
  });
@@ -103,5 +104,18 @@ test('admin end-to-end API regression',async t=>{
   assert.equal((await query('SELECT COUNT(*)::int n FROM race_entries WHERE event_key=$1',[key])).rows[0].n,3,'failed saves keep existing heats');
   assert.equal((await api('/api/admin/save-heats',{eventKey:'bad',entries:[]})).status,400);assert.equal((await api('/api/admin/heat-builder?eventKey=bad')).status,400);
   assert.equal((await query("SELECT COUNT(*)::int n FROM admin_audit WHERE action='SAVE_HEATS' AND entity_key=$1",[key])).rows[0].n,1);
+ });
+ await t.test('edit participant name and school: saved, shown on the ticket, audited, validated',async()=>{
+  const edit=body=>api('/api/admin/registrations/'+encodeURIComponent(id)+'/details',body);
+  const saved=await edit({fullName:'  Aarna   Sawant ',schoolName:'Test School'});
+  assert.equal(saved.status,200);assert.deepEqual([saved.body.changed,saved.body.fullName,saved.body.schoolName],[true,'Aarna Sawant','Test School']);
+  assert.equal((await api('/api/admin/registrations/'+id)).body.full_name,'Aarna Sawant');
+  assert.equal((await (await fetch(base+'/api/ticket/'+token)).json()).fullName,'Aarna Sawant','ticket reads the new name');
+  const audit=(await query("SELECT details_json FROM admin_audit WHERE action='EDIT_REGISTRATION' AND entity_key=$1",[id])).rows;
+  assert.equal(audit.length,1);assert.deepEqual(audit[0].details_json,{full_name:{from:'Admin Test Swimmer',to:'Aarna Sawant'}});
+  assert.equal((await edit({fullName:'Aarna Sawant',schoolName:'Test School'})).body.changed,false);
+  for(const body of [{fullName:'   ',schoolName:'Test School'},{fullName:'Aarna',schoolName:''},{fullName:'x'.repeat(121),schoolName:'Test School'},{fullName:42,schoolName:'Test School'},{}])assert.equal((await edit(body)).status,400,JSON.stringify(body));
+  assert.equal((await api('/api/admin/registrations/NOPE/details',{fullName:'A',schoolName:'B'})).status,404);
+  assert.equal((await api('/api/admin/registrations/'+id)).body.full_name,'Aarna Sawant','rejected edits change nothing');
  });
 });
