@@ -9,7 +9,7 @@ const {pool,initDb,withTransaction}=require('./src/db');
 const {CATEGORIES,categoryForDob,eventKey,parseEventKey}=require('./src/competition');
 
 const {registrationEvents,registrationRow,registrationColumns}=require('./src/admin-data');
-const {planHeats}=require('./src/heat-import');
+const {planHeats}=require('./src/heats');
 const {requiresFloaters}=require('./public/floater-policy');
 
 const app=express();
@@ -286,27 +286,30 @@ app.post('/api/admin/seed-heats',requireAdmin,async(req,res)=>{
   res.json({ok:true,participants:regs.length,heats:Math.ceil(regs.length/lanes)});
 });
 
-// Heats from an uploaded CSV (the dashboard export). Uses Heat/Lane columns when filled, otherwise row order.
-// ?dryRun=1 only validates and returns the preview; saving replaces the event's existing heat assignments.
-app.post('/api/admin/import-heats',requireAdmin,express.text({type:['text/csv','text/plain'],limit:'2mb'}),async(req,res)=>{
-  const ek=req.query.eventKey,lanes=Number(req.query.lanes||6),dryRun=req.query.dryRun==='1';
+// Heat builder on the Timings desk: the event's swimmers with payment/check-in status and any saved heat/lane.
+app.get('/api/admin/heat-builder',requireAdmin,async(req,res)=>{
+  const ek=req.query.eventKey;
   if(!validEventKey(ek))return res.status(400).json({error:'Select a valid event first.'});
-  if(typeof req.body!=='string'||!req.body.trim())return res.status(400).json({error:'Choose a CSV file to upload.'});
   const {category,gender,event}=parseEventKey(ek);
-  const all=await q('SELECT registration_id,full_name,school_name,age_category,gender,events_json FROM registrations ORDER BY created_at,full_name');
-  const eventRegistrations=all.filter(r=>r.age_category===category&&r.gender===gender&&registrationEvents(r.events_json).includes(event));
-  const plan=planHeats(req.body,{lanes,eventRegistrations,knownRegistrations:new Map(all.map(r=>[r.registration_id,r]))});
-  const swimmer=r=>({registrationId:r.registration_id,fullName:r.full_name,schoolName:r.school_name});
-  const summary={mode:plan.mode,participants:plan.entries.length,heats:new Set(plan.entries.map(e=>e.heat_no)).size,
-    entries:plan.entries.map(e=>({heatNo:e.heat_no,laneNo:e.lane_no,...swimmer(e.reg)})),missing:plan.missing.map(swimmer)};
-  if(plan.errors.length)return res.status(400).json({error:'The CSV has problems. Fix them and upload again.',errors:plan.errors,missing:summary.missing});
-  if(dryRun)return res.json({ok:true,dryRun:true,...summary});
+  const rows=(await q(`SELECT r.registration_id,r.full_name,r.school_name,r.payment_status,r.checkin_status,r.events_json,re.heat_no,re.lane_no FROM registrations r LEFT JOIN race_entries re ON re.registration_id=r.registration_id AND re.event_key=$3 WHERE r.age_category=$1 AND r.gender=$2 ORDER BY r.created_at,r.full_name`,[category,gender,ek])).filter(r=>registrationEvents(r.events_json).includes(event));
+  res.json({swimmers:rows.map(r=>({registrationId:r.registration_id,fullName:r.full_name,schoolName:r.school_name,paymentStatus:r.payment_status,checkinStatus:r.checkin_status,heatNo:r.heat_no,laneNo:r.lane_no}))});
+});
+
+// Saves heats arranged on the Timings desk, replacing the event's existing assignments. Invalid plans save nothing.
+app.post('/api/admin/save-heats',requireAdmin,async(req,res)=>{
+  const ek=req.body?.eventKey;
+  if(!validEventKey(ek))return res.status(400).json({error:'Select a valid event first.'});
+  const {category,gender,event}=parseEventKey(ek);
+  const eventRegistrations=(await q('SELECT registration_id,full_name,school_name,events_json FROM registrations WHERE age_category=$1 AND gender=$2 ORDER BY created_at,full_name',[category,gender])).filter(r=>registrationEvents(r.events_json).includes(event));
+  const plan=planHeats(req.body.entries,{eventRegistrations});
+  if(plan.errors.length)return res.status(400).json({error:'These heats have problems: '+plan.errors.join(' '),errors:plan.errors});
   await withTransaction(async c=>{
     await c.query('DELETE FROM race_entries WHERE event_key=$1',[ek]);
     for(const e of plan.entries)await c.query('INSERT INTO race_entries(event_key,heat_no,lane_no,registration_id) VALUES($1,$2,$3,$4)',[ek,e.heat_no,e.lane_no,e.reg.registration_id]);
   });
-  await audit('IMPORT_HEATS','event',ek,{participants:summary.participants,heats:summary.heats,mode:plan.mode,lanes:plan.mode==='auto'?lanes:null,missing:summary.missing.map(m=>m.registrationId)},req.session.operator);
-  res.json({ok:true,...summary});
+  const heats=new Set(plan.entries.map(e=>e.heat_no)).size;
+  await audit('SAVE_HEATS','event',ek,{participants:plan.entries.length,heats,notPlaced:plan.missing.map(m=>m.registration_id)},req.session.operator);
+  res.json({ok:true,participants:plan.entries.length,heats,notPlaced:plan.missing.length});
 });
 
 app.get('/api/admin/race-card',requireAdmin,async(req,res)=>{
@@ -352,8 +355,8 @@ app.get('/api/admin/registrations.csv',requireAdmin,async(req,res)=>{
   const filters=req.query,invalid=invalidRegistrationFilters(filters,registrationFilterKeys);
   if(invalid)return res.status(400).json({error:invalid});
   const rows=await filteredRegistrations(filters);
-  const header=['Sr No','Registration ID','Participant','School','Gender','DOB','Age category','Events','Contact','Payment status','Check-in status','Heat','Lane'];
-  const lines=[header,...rows.map((r,i)=>[i+1,r.registration_id,r.full_name,r.school_name,r.gender,r.dob,r.age_category,r.events_json.join('; '),r.phone,r.payment_status,r.checkin_status,'',''])].map(line=>line.map(csvCell).join(','));
+  const header=['Sr No','Registration ID','Participant','School','Gender','DOB','Age category','Events','Contact','Payment status','Check-in status'];
+  const lines=[header,...rows.map((r,i)=>[i+1,r.registration_id,r.full_name,r.school_name,r.gender,r.dob,r.age_category,r.events_json.join('; '),r.phone,r.payment_status,r.checkin_status])].map(line=>line.map(csvCell).join(','));
   const label=[filters.category,filters.gender,filters.event,filters.paymentStatus].filter(Boolean).join('-').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'')||'all';
   const stamp=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
   await audit('export','registrations',null,{filters:Object.fromEntries(registrationFilterKeys.filter(k=>filters[k]).map(k=>[k,filters[k]])),count:rows.length},req.session.operator);
@@ -369,6 +372,22 @@ app.get('/api/admin/registrations/:registrationId',requireAdmin,async(req,res)=>
   const ticketUrl=row.ticket_token?`/success.html?token=${encodeURIComponent(row.ticket_token)}`:null;
   const qrDataUrl=row.ticket_token?await QRCode.toDataURL(`${BASE_URL}/admin/checkin.html?token=${encodeURIComponent(row.ticket_token)}`,{margin:1,width:360}):null;
   res.json({...registration,ticketUrl,qrDataUrl});
+});
+
+// Correct a participant's name or school (e.g. a parent's typo). Ticket, check-in, heats and results read these live.
+app.post('/api/admin/registrations/:registrationId/details',requireAdmin,async(req,res)=>{
+  const registrationId=String(req.params.registrationId||'').trim(),{fullName,schoolName}=req.body||{};
+  const clean=value=>typeof value==='string'?value.trim().replace(/\s+/g,' '):'';
+  const next={full_name:clean(fullName),school_name:clean(schoolName)};
+  if(!next.full_name||!next.school_name)return res.status(400).json({error:'Participant name and school are required.'});
+  if(next.full_name.length>120||next.school_name.length>120)return res.status(400).json({error:'Name and school must be 120 characters or fewer.'});
+  const existing=(await q('SELECT full_name,school_name FROM registrations WHERE registration_id=$1',[registrationId]))[0];
+  if(!existing)return res.status(404).json({error:'Registration not found.'});
+  const changes=Object.fromEntries(Object.entries(next).filter(([key,value])=>existing[key]!==value).map(([key,value])=>[key,{from:existing[key],to:value}]));
+  if(!Object.keys(changes).length)return res.json({ok:true,changed:false,fullName:next.full_name,schoolName:next.school_name});
+  await q('UPDATE registrations SET full_name=$1,school_name=$2 WHERE registration_id=$3',[next.full_name,next.school_name,registrationId]);
+  await audit('EDIT_REGISTRATION','registration',registrationId,changes,req.session.operator);
+  res.json({ok:true,changed:true,fullName:next.full_name,schoolName:next.school_name});
 });
 
 app.delete('/api/admin/registrations/:registrationId',requireAdmin,async(req,res)=>{

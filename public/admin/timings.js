@@ -20,41 +20,51 @@ document.getElementById('list').addEventListener('click',run(async e=>{
 eventSelect.addEventListener('change',()=>{document.getElementById('list').replaceChildren();heatInfo.textContent='';heat.value=1});
 run(async()=>{if(!await Admin.authenticated())return;const events=await api('/api/admin/events');eventSelect.innerHTML='<option value="">Select event</option>'+events.map(e=>`<option value="${esc(e.key)}">${text(e.category)} • ${text(e.gender)} • ${text(e.event)} (${e.count})</option>`).join('')})();
 
-// CSV heat import: download the event's swimmers, fill Heat/Lane in Excel (optional), preview, then save.
-const csvInput=document.getElementById('heatCsv'),preview=document.getElementById('heatPreview');
-let previewed=null;
-const clearPreview=()=>{previewed=null;preview.replaceChildren()};
-const importUrl=dryRun=>`/api/admin/import-heats?${new URLSearchParams({eventKey:eventSelect.value,lanes:lanes.value,dryRun:dryRun?'1':'0'})}`;
-async function sendHeats(csv,dryRun){
- const response=await fetch(importUrl(dryRun),{method:'POST',headers:{'Content-Type':'text/csv'},body:csv});
- const data=await response.json().catch(()=>({error:'Invalid server response. Please retry.'}));
- if(response.status===401)location.assign('/admin/');
- return {ok:response.ok,data};
+// Heat builder: arrange the event's registered swimmers into heats/lanes on this page, adjust, then save.
+const builder=document.getElementById('heatBuilder'),include=document.getElementById('heatInclude'),order=document.getElementById('heatOrder');
+let builderEvent=null;
+const clearBuilder=()=>{builderEvent=null;builder.replaceChildren()};
+const byName=(a,b)=>String(a.fullName||'').localeCompare(String(b.fullName||''),'en',{sensitivity:'base'});
+const sorters={registration:()=>0,name:byName,school:(a,b)=>String(a.schoolName||'').localeCompare(String(b.schoolName||''),'en',{sensitivity:'base'})||byName(a,b)};
+const included={all:()=>true,verified:s=>s.paymentStatus==='Verified',checked:s=>s.checkinStatus==='Approved'};
+async function builderSwimmers(){
+ if(!eventSelect.value)throw Error('Select an event first.');
+ return (await api('/api/admin/heat-builder?eventKey='+encodeURIComponent(eventSelect.value))).swimmers;
 }
-const missingNote=missing=>missing.length?`<p class="notice">${missing.length} swimmer(s) registered for this event are not in the CSV and will not be placed in any heat: ${missing.map(m=>`${esc(m.fullName)} (${esc(m.registrationId)})`).join(', ')}</p>`:'';
-document.getElementById('downloadEventCsv').onclick=run(async()=>{
- if(!eventSelect.value)throw Error('Select an event first.');
- const [category,gender,event]=eventSelect.value.split('|||');
- await Admin.download('/api/admin/registrations.csv?'+new URLSearchParams({category,gender,event}),'bsf-heats.csv');
+function renderBuilder(swimmers,note){
+ builderEvent=eventSelect.value;
+ const placed=swimmers.filter(s=>s.heatNo).sort((a,b)=>a.heatNo-b.heatNo||a.laneNo-b.laneNo),unplaced=swimmers.filter(s=>!s.heatNo);
+ const heats=new Set(placed.map(s=>s.heatNo)).size;
+ const row=s=>`<tr data-builder-row="${esc(s.registrationId)}"><td><input class="heat-no" type="number" min="1" inputmode="numeric" aria-label="Heat for ${esc(s.fullName)}" value="${s.heatNo??''}"></td><td><input class="lane-no" type="number" min="1" max="10" inputmode="numeric" aria-label="Lane for ${esc(s.fullName)}" value="${s.laneNo??''}"></td><td>${text(s.fullName)}<div class="muted">${text(s.registrationId)}</div></td><td>${text(s.schoolName)}</td><td>${text(s.paymentStatus)}</td><td>${text(s.checkinStatus)}</td></tr>`;
+ builder.innerHTML=swimmers.length?`<p><b>${placed.length} swimmer(s) in ${heats} heat(s)</b> — ${esc(note)}${unplaced.length?` ${unplaced.length} swimmer(s) not in a heat are listed at the bottom.`:''}</p><div class="admin-table-scroll"><table><thead><tr><th>Heat</th><th>Lane</th><th>Swimmer</th><th>School</th><th>Payment</th><th>Check-in</th></tr></thead><tbody>${placed.map(row).join('')}${unplaced.length?`<tr class="heat-builder-divider"><td colspan="6">Not in a heat</td></tr>${unplaced.map(row).join('')}`:''}</tbody></table></div><div class="row"><button type="button" class="good" id="saveHeats">Save heats</button><button type="button" class="secondary" id="cancelHeats">Cancel</button></div>`:'<p class="notice">No swimmers are registered for this event.</p>';
+ document.getElementById('cancelHeats')?.addEventListener('click',clearBuilder);
+ document.getElementById('saveHeats')?.addEventListener('click',saveHeats);
+}
+document.getElementById('arrangeHeats').onclick=run(async()=>{
+ const size=Number(lanes.value);
+ if(!Number.isInteger(size)||size<1||size>10)throw Error('Lanes per heat must be from 1 to 10.');
+ const swimmers=await builderSwimmers(),picked=swimmers.filter(included[include.value]).sort(sorters[order.value]);
+ const slot=new Map(picked.map((s,i)=>[s.registrationId,{heatNo:Math.floor(i/size)+1,laneNo:i%size+1}]));
+ renderBuilder(swimmers.map(s=>({...s,heatNo:null,laneNo:null,...slot.get(s.registrationId)})),`arranged automatically, ${size} lanes per heat (${include.selectedOptions[0].text.toLowerCase()}, ${order.selectedOptions[0].text}). Not saved yet.`);
 });
-document.getElementById('previewHeats').onclick=run(async()=>{
- clearPreview();
- if(!eventSelect.value)throw Error('Select an event first.');
- const file=csvInput.files[0];if(!file)throw Error('Choose the CSV file to upload.');
- const csv=await file.text(),{ok,data}=await sendHeats(csv,true);
- if(!ok){preview.innerHTML=`<div class="notice admin-error"><b>${esc(data.error||'Import failed.')}</b>${data.errors?.length?`<ul>${data.errors.map(e=>`<li>${esc(e)}</li>`).join('')}</ul>`:''}</div>`;return}
- previewed={csv,eventKey:eventSelect.value};
- const heats=[...new Set(data.entries.map(e=>e.heatNo))];
- preview.innerHTML=`<p><b>${data.participants} swimmer(s) in ${data.heats} heat(s)</b> — ${data.mode==='csv'?'using the Heat and Lane columns from the CSV':`arranged in CSV row order, ${esc(lanes.value)} lanes per heat`}.</p>${missingNote(data.missing)}${heats.map(h=>`<h3>Heat ${h}</h3><div class="admin-table-scroll"><table data-preview-heat="${h}"><thead><tr><th>Lane</th><th>Swimmer</th><th>School</th><th>Registration ID</th></tr></thead><tbody>${data.entries.filter(e=>e.heatNo===h).map(e=>`<tr><td>${e.laneNo}</td><td>${text(e.fullName)}</td><td>${text(e.schoolName)}</td><td>${text(e.registrationId)}</td></tr>`).join('')}</tbody></table></div>`).join('')}<div class="row"><button type="button" class="good" id="saveHeats">Save these heats</button><button type="button" class="secondary" id="cancelHeats">Cancel</button></div>`;
- document.getElementById('cancelHeats').onclick=clearPreview;
- document.getElementById('saveHeats').onclick=run(async()=>{
-  if(!previewed||previewed.eventKey!==eventSelect.value)throw Error('Preview the CSV again before saving.');
-  if(!confirm('Save these heats? Existing heat assignments for this event will be replaced.'))return;
-  const {ok,data}=await sendHeats(previewed.csv,false);
-  if(!ok)throw Error([data.error,...(data.errors||[])].filter(Boolean).join(' '));
-  clearPreview();csvInput.value='';heat.value=1;await loadHeat();
-  heatInfo.textContent=`Imported from CSV: ${data.participants} swimmers in ${data.heats} heat(s). Showing heat 1.`;
- });
+document.getElementById('editSavedHeats').onclick=run(async()=>{
+ const swimmers=await builderSwimmers();
+ if(!swimmers.some(s=>s.heatNo))throw Error('No heats are saved for this event yet. Use Arrange heats.');
+ renderBuilder(swimmers,'the heats currently saved for this event.');
 });
-for(const input of [csvInput,lanes])input.addEventListener('change',clearPreview);
-eventSelect.addEventListener('change',clearPreview);
+const saveHeats=run(async()=>{
+ if(builderEvent!==eventSelect.value)throw Error('The event changed. Arrange the heats again before saving.');
+ const entries=[],incomplete=[];let skipped=0;
+ for(const tr of builder.querySelectorAll('[data-builder-row]')){
+  const heatNo=tr.querySelector('.heat-no').value.trim(),laneNo=tr.querySelector('.lane-no').value.trim();
+  if(!heatNo&&!laneNo){skipped++;continue}
+  if(!heatNo||!laneNo){incomplete.push(tr.children[2].firstChild.textContent);continue}
+  entries.push({registrationId:tr.dataset.builderRow,heatNo:Number(heatNo),laneNo:Number(laneNo)});
+ }
+ if(incomplete.length)throw Error(`Fill in both Heat and Lane for: ${incomplete.join(', ')}.`);
+ if(!confirm(`Save ${entries.length} swimmer(s) into heats?${skipped?` ${skipped} swimmer(s) will not be in any heat.`:''} Existing heats for this event will be replaced.`))return;
+ const data=await post('/api/admin/save-heats',{eventKey:eventSelect.value,entries});
+ clearBuilder();heat.value=1;await loadHeat();
+ heatInfo.textContent=`Heats saved: ${data.participants} swimmers in ${data.heats} heat(s). Showing heat 1.`;
+});
+for(const control of [eventSelect,lanes])control.addEventListener('change',clearBuilder);

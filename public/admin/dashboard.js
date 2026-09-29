@@ -34,4 +34,5 @@ document.getElementById('downloadCsv').onclick=run(async()=>{
 document.getElementById('previousPage').onclick=run(async()=>{page--;await loadRegistrations()});
 document.getElementById('nextPage').onclick=run(async()=>{page++;await loadRegistrations()});
 document.addEventListener('admin-payment-updated',run(async()=>{await Promise.all([overview(),loadRegistrations()])}));
+document.addEventListener('admin-registration-updated',run(loadRegistrations));
 run(load)();

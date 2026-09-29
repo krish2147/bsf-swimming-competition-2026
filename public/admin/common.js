@@ -28,7 +28,8 @@
   const details=modal('participantDialog','Participant details'),lightbox=modal('mediaDialog','Registration image');
   function media(url,label){return url?`<button type="button" class="admin-media-button" data-image="${escape(url)}" data-label="${escape(label)}" aria-label="Enlarge ${escape(label)}"><img src="${escape(url)}" alt="${escape(label)}" loading="lazy"></button>`:`<p class="muted">${escape(label)} unavailable</p>`}
   document.addEventListener('error',e=>{if(e.target.tagName==='IMG'&&e.target.closest('.admin-media-button')){const button=e.target.closest('button');button.disabled=true;button.textContent=e.target.alt+' unavailable'}},true);
-  document.addEventListener('click',run(async e=>{
+  // Only photo/participant clicks run here: wrapping every click in run() would clear other errors as they appear.
+  const openFromClick=run(async e=>{
     const button=e.target.closest('[data-image]');
     if(button){
       const image=document.createElement('img');image.src=button.dataset.image;image.alt=button.dataset.label;
@@ -37,16 +38,29 @@
     }
     const participant=e.target.closest('[data-participant]');
     if(participant)await openParticipant(participant.dataset.participant);
-  }));
+  });
+  document.addEventListener('click',e=>{if(e.target.closest('[data-image],[data-participant]'))openFromClick(e)});
   async function openParticipant(id){
     const r=await api('/api/admin/registrations/'+encodeURIComponent(id));
     const fields=[['Registration ID',r.registration_id],['Participant',r.full_name],['School',r.school_name],['Gender',r.gender],['DOB',r.dob],['Category',r.age_category],['Contact',r.phone],['Email',r.email],['Guardian',r.guardian_name],['Registered (IST)',date(r.created_at)],['Amount',r.amount==null?null:'₹'+r.amount],['UTR',r.payment_utr],['Check-in',r.checkin_status]];
-    details.querySelector('.admin-dialog-content').innerHTML=`<dl class="admin-details">${fields.map(([label,value])=>`<div><dt>${label}</dt><dd>${text(value)}</dd></div>`).join('')}</dl><h3>Selected events</h3><p>${(r.events_json||[]).map(escape).join('<br>')||'No events recorded'}</p><div class="grid"><div><h3>Participant photo</h3>${media(r.participant_photo,'Participant photo')}</div><div><h3>Payment proof</h3>${media(r.payment_proof,'Payment proof')}</div></div><p>Payment status: <b id="detailPaymentStatus">${text(r.payment_status)}</b></p><div class="row">${['Verified','Pending','Issue'].map(status=>`<button type="button" data-status="${status}" class="${status==='Verified'?'good':status==='Issue'?'bad':'secondary'}">${status}</button>`).join('')}</div><p id="detailMessage" role="status"></p>${r.ticketUrl?`<h3>Ticket / QR</h3><img class="qr" src="${escape(r.qrDataUrl)}" alt="Participant check-in QR code"><p><a href="${escape(r.ticketUrl)}">Open registration ticket</a></p>`:'<p>Ticket unavailable</p>'}<hr><h3>Delete registration</h3><p class="muted">Permanently removes this registration and its linked race data. This cannot be undone.</p><button type="button" id="deleteRegistration" class="bad">Delete registration</button><p id="deleteMessage" role="status"></p>`;
+    details.querySelector('.admin-dialog-content').innerHTML=`<dl class="admin-details">${fields.map(([label,value])=>`<div><dt>${label}</dt><dd>${text(value)}</dd></div>`).join('')}</dl><h3>Selected events</h3><p>${(r.events_json||[]).map(escape).join('<br>')||'No events recorded'}</p><div class="grid"><div><h3>Participant photo</h3>${media(r.participant_photo,'Participant photo')}</div><div><h3>Payment proof</h3>${media(r.payment_proof,'Payment proof')}</div></div><p>Payment status: <b id="detailPaymentStatus">${text(r.payment_status)}</b></p><div class="row">${['Verified','Pending','Issue'].map(status=>`<button type="button" data-status="${status}" class="${status==='Verified'?'good':status==='Issue'?'bad':'secondary'}">${status}</button>`).join('')}</div><p id="detailMessage" role="status"></p>${r.ticketUrl?`<h3>Ticket / QR</h3><img class="qr" src="${escape(r.qrDataUrl)}" alt="Participant check-in QR code"><p><a href="${escape(r.ticketUrl)}">Open registration ticket</a></p>`:'<p>Ticket unavailable</p>'}<hr><h3>Edit details</h3><p class="muted">Correct spelling mistakes. The ticket, check-in, heats and results update automatically; the ticket QR stays the same.</p><label for="editFullName">Participant name</label><input id="editFullName" maxlength="120" autocomplete="off" value="${escape(r.full_name)}"><label for="editSchoolName">School</label><input id="editSchoolName" maxlength="120" autocomplete="off" value="${escape(r.school_name)}"><button type="button" id="saveDetails">Save changes</button><p id="editMessage" role="status"></p><hr><h3>Delete registration</h3><p class="muted">Permanently removes this registration and its linked race data. This cannot be undone.</p><button type="button" id="deleteRegistration" class="bad">Delete registration</button><p id="deleteMessage" role="status"></p>`;
     for(const button of details.querySelectorAll('[data-status]'))button.onclick=async()=>{
       const buttons=[...details.querySelectorAll('[data-status]')];buttons.forEach(b=>b.disabled=true);
       try{await post('/api/admin/payment-status',{registrationId:id,status:button.dataset.status});document.getElementById('detailPaymentStatus').textContent=button.dataset.status;document.getElementById('detailMessage').textContent='Payment status saved.';document.dispatchEvent(new CustomEvent('admin-payment-updated',{detail:{id,status:button.dataset.status}}))}
       catch(err){document.getElementById('detailMessage').textContent=err.message}
       finally{buttons.forEach(b=>b.disabled=false)}
+    };
+    const saveDetails=document.getElementById('saveDetails');
+    saveDetails.onclick=async()=>{
+      const fullName=document.getElementById('editFullName').value,schoolName=document.getElementById('editSchoolName').value;
+      if(!fullName.trim()||!schoolName.trim()){document.getElementById('editMessage').textContent='Participant name and school are required.';return}
+      saveDetails.disabled=true;document.getElementById('editMessage').textContent='Saving…';
+      try{
+        const saved=await post('/api/admin/registrations/'+encodeURIComponent(id)+'/details',{fullName,schoolName});
+        if(saved.changed){await openParticipant(id);document.dispatchEvent(new CustomEvent('admin-registration-updated',{detail:{id}}))}
+        document.getElementById('editMessage').textContent=saved.changed?`Saved. Name: ${saved.fullName} · School: ${saved.schoolName}`:'No changes to save.';
+      }catch(err){document.getElementById('editMessage').textContent=err.message}
+      finally{document.getElementById('saveDetails').disabled=false}
     };
     const deleteButton=document.getElementById('deleteRegistration');
     deleteButton.onclick=async()=>{
