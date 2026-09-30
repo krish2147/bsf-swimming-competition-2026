@@ -68,3 +68,8 @@ const saveHeats=run(async()=>{
  heatInfo.textContent=`Heats saved: ${data.participants} swimmers in ${data.heats} heat(s). Showing heat 1.`;
 });
 for(const control of [eventSelect,lanes])control.addEventListener('change',clearBuilder);
+// Printable heat sheets for timekeepers (all saved heats of the selected event).
+for(const [id,format] of [['heatSheetPdf','pdf'],['heatSheetWord','docx']])document.getElementById(id).onclick=run(async()=>{
+ if(!eventSelect.value)throw Error('Select an event first.');
+ await Admin.download('/api/admin/heat-sheet?'+new URLSearchParams({eventKey:eventSelect.value,format}),'heat-sheet.'+format);
+});

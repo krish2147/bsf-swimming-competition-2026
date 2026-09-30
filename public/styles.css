@@ -70,3 +70,4 @@ nav.co-branded-header .nav-cta{margin-left:0}
 .admin-filter-actions{grid-column:1/-1}.admin-filter-actions button{white-space:nowrap}
 .heat-builder #heatBuilder:not(:empty){margin-top:18px;padding-top:18px;border-top:1px solid var(--line)}.heat-builder #heatBuilder .row{margin-top:18px}.heat-builder td input{width:72px;min-height:40px;margin:0;padding:8px 10px}.heat-builder-divider td{background:#f2f6fa;font-weight:700;color:var(--muted);font-size:12px;text-transform:uppercase;letter-spacing:.08em}
 @media(max-width:600px){.heat-builder td{padding:10px 6px}.heat-builder td input{width:52px;padding:8px 6px}}
+.heat-sheet-download{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}.heat-sheet-download .row{margin-top:10px}
