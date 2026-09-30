@@ -12,6 +12,7 @@ const {registrationEvents,registrationRow,registrationColumns}=require('./src/ad
 const {planHeats}=require('./src/heats');
 const {heatSheetPdf,heatSheetDocx,buildHeatSheet}=require('./src/heat-sheets');
 const {requiresFloaters}=require('./public/floater-policy');
+const {assignHeats,heatSizes}=require('./public/heat-layout');
 
 const app=express();
 const PORT=process.env.PORT||3000;
@@ -281,10 +282,11 @@ app.post('/api/admin/seed-heats',requireAdmin,async(req,res)=>{
   const regs=(await q('SELECT registration_id,full_name,school_name,events_json FROM registrations WHERE age_category=$1 AND gender=$2 ORDER BY created_at,full_name',[category,gender])).filter(r=>registrationEvents(r.events_json).includes(event));
   await withTransaction(async c=>{
     await c.query('DELETE FROM race_entries WHERE event_key=$1',[ek]);
-    for(let i=0;i<regs.length;i++)await c.query('INSERT INTO race_entries(event_key,heat_no,lane_no,registration_id) VALUES($1,$2,$3,$4)',[ek,Math.floor(i/lanes)+1,(i%lanes)+1,regs[i].registration_id]);
+    const slots=assignHeats(regs.length,lanes);
+    for(let i=0;i<regs.length;i++)await c.query('INSERT INTO race_entries(event_key,heat_no,lane_no,registration_id) VALUES($1,$2,$3,$4)',[ek,slots[i].heatNo,slots[i].laneNo,regs[i].registration_id]);
   });
   await audit('SEED_HEATS','event',ek,{participants:regs.length,lanes},req.session.operator);
-  res.json({ok:true,participants:regs.length,heats:Math.ceil(regs.length/lanes)});
+  res.json({ok:true,participants:regs.length,heats:heatSizes(regs.length,lanes).length,heatSizes:heatSizes(regs.length,lanes)});
 });
 
 // Heat builder on the Timings desk: the event's swimmers with payment/check-in status and any saved heat/lane.

@@ -145,4 +145,12 @@ test('admin end-to-end API regression',async t=>{
   assert.equal((await api('/api/admin/heat-sheet?format=pdf&eventKey=bad')).status,400);
   assert.equal((await api('/api/admin/heat-sheet?format=pdf&eventKey='+encodeURIComponent(eventKey('Under-12','Girls','25m Freestyle')))).status,404);
  });
+ await t.test('Create / Reset Heats splits 13 swimmers into even heats of 5, 4, 4',async()=>{
+  const butterfly=eventKey('Under-12','Girls','25m Butterfly');
+  for(let i=1;i<=13;i++)await register({gender:'Girls',fullName:`Butterfly Swimmer ${i}`,events:JSON.stringify(['25m Butterfly'])});
+  const seed=await api('/api/admin/seed-heats',{eventKey:butterfly,lanes:6});
+  assert.equal(seed.status,200);assert.equal(seed.body.heats,3);assert.deepEqual(seed.body.heatSizes,[5,4,4]);
+  const rows=(await query('SELECT heat_no,COUNT(*)::int n,MAX(lane_no)::int top FROM race_entries WHERE event_key=$1 GROUP BY heat_no ORDER BY heat_no',[butterfly])).rows;
+  assert.deepEqual(rows,[{heat_no:1,n:5,top:5},{heat_no:2,n:4,top:4},{heat_no:3,n:4,top:4}]);
+ });
 });

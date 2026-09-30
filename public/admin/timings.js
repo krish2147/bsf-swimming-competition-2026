@@ -4,7 +4,7 @@ window.seedHeats=run(async()=>{
  if(!eventSelect.value)throw Error('Select an event first.');
  if(!confirm('Create heat/lane assignments for this event? Existing heat assignments will be reset.'))return;
  const data=await post('/api/admin/seed-heats',{eventKey:eventSelect.value,lanes:Number(lanes.value)});
- heat.value=1;await loadHeat();heatInfo.textContent=`${data.participants} swimmers arranged into ${data.heats} heat(s).`;
+ heat.value=1;await loadHeat();heatInfo.textContent=`${data.participants} swimmers arranged into ${data.heats} heat(s)${data.heatSizes?.length?` of ${data.heatSizes.join(' / ')} swimmers`:''}.`;
 });
 window.loadHeat=run(async()=>{
  if(!eventSelect.value)return;
@@ -44,8 +44,8 @@ document.getElementById('arrangeHeats').onclick=run(async()=>{
  const size=Number(lanes.value);
  if(!Number.isInteger(size)||size<1||size>10)throw Error('Lanes per heat must be from 1 to 10.');
  const swimmers=await builderSwimmers(),picked=swimmers.filter(included[include.value]).sort(sorters[order.value]);
- const slot=new Map(picked.map((s,i)=>[s.registrationId,{heatNo:Math.floor(i/size)+1,laneNo:i%size+1}]));
- renderBuilder(swimmers.map(s=>({...s,heatNo:null,laneNo:null,...slot.get(s.registrationId)})),`arranged automatically, ${size} lanes per heat (${include.selectedOptions[0].text.toLowerCase()}, ${order.selectedOptions[0].text}). Not saved yet.`);
+ const slots=BSFHeatLayout.assignHeats(picked.length,size),slot=new Map(picked.map((s,i)=>[s.registrationId,slots[i]]));
+ renderBuilder(swimmers.map(s=>({...s,heatNo:null,laneNo:null,...slot.get(s.registrationId)})),`arranged evenly (${BSFHeatLayout.heatSizes(picked.length,size).join(' / ')} swimmers), up to ${size} lanes per heat (${include.selectedOptions[0].text.toLowerCase()}, ${order.selectedOptions[0].text}). Not saved yet.`);
 });
 document.getElementById('editSavedHeats').onclick=run(async()=>{
  const swimmers=await builderSwimmers();
