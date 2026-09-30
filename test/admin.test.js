@@ -4,6 +4,19 @@ const {start,close,query}=require('../test-support/admin-harness.cjs');
 const {registrationEvents}=require('../src/admin-data');
 const {eventKey}=require('../src/competition');
 let base,cookie;
+// Reads one file out of a .docx (zip) via the central directory, for checking generated Word text.
+function zipEntry(zip,name){
+ const end=zip.lastIndexOf(Buffer.from([0x50,0x4b,0x05,0x06]));let at=zip.readUInt32LE(end+16);
+ for(let i=0;i<zip.readUInt16LE(end+10);i++){
+  const method=zip.readUInt16LE(at+10),size=zip.readUInt32LE(at+20),nameLength=zip.readUInt16LE(at+28),extra=zip.readUInt16LE(at+30),comment=zip.readUInt16LE(at+32),local=zip.readUInt32LE(at+42);
+  if(zip.toString('utf8',at+46,at+46+nameLength)===name){
+   const start=local+30+zip.readUInt16LE(local+26)+zip.readUInt16LE(local+28),data=zip.subarray(start,start+size);
+   return (method===8?require('node:zlib').inflateRawSync(data):data).toString('utf8');
+  }
+  at+=46+nameLength+extra+comment;
+ }
+ throw new Error(name+' not found in zip');
+}
 after(close);
 async function api(path,body,auth=true){const response=await fetch(base+path,{method:body?'POST':'GET',headers:{...(auth?{cookie}:{}),...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});return {status:response.status,body:await response.json()}}
 async function register(overrides={}){
@@ -24,6 +37,7 @@ test('admin end-to-end API regression',async t=>{
   for(const url of ['/api/admin/payment-status','/api/admin/timing','/api/admin/result','/api/admin/publish-event','/api/admin/unpublish-event','/api/admin/checkin/'+token,'/api/admin/seed-heats'])assert.equal((await api(url,{},false)).status,401,url);
   assert.equal((await api('/api/admin/heat-builder?eventKey='+encodeURIComponent(key),null,false)).status,401);assert.equal((await api('/api/admin/save-heats',{eventKey:key,entries:[]},false)).status,401);
   assert.equal((await api('/api/admin/registrations/'+id+'/details',{fullName:'X',schoolName:'Y'},false)).status,401);
+  assert.equal((await api('/api/admin/heat-sheet?format=pdf&eventKey='+encodeURIComponent(key),null,false)).status,401);
   for(const kind of ['photo','proof'])assert.equal((await fetch(base+`/api/media/${id}/${kind}`)).status,401);
   assert.equal((await api('/api/admin/login',{pin:'wrong'},false)).status,403);
  });
@@ -117,5 +131,18 @@ test('admin end-to-end API regression',async t=>{
   for(const body of [{fullName:'   ',schoolName:'Test School'},{fullName:'Aarna',schoolName:''},{fullName:'x'.repeat(121),schoolName:'Test School'},{fullName:42,schoolName:'Test School'},{}])assert.equal((await edit(body)).status,400,JSON.stringify(body));
   assert.equal((await api('/api/admin/registrations/NOPE/details',{fullName:'A',schoolName:'B'})).status,404);
   assert.equal((await api('/api/admin/registrations/'+id)).body.full_name,'Aarna Sawant','rejected edits change nothing');
+ });
+ await t.test('heat sheets download as PDF and Word with every saved heat and the live names',async()=>{
+  const sheet=format=>fetch(base+'/api/admin/heat-sheet?'+new URLSearchParams({eventKey:key,format}),{headers:{cookie}});
+  const pdf=await sheet('pdf');assert.equal(pdf.status,200);assert.equal(pdf.headers.get('content-type'),'application/pdf');
+  assert.match(pdf.headers.get('content-disposition'),/filename="heat-sheet-Under-12-Boys-25m-Freestyle\.pdf"/);
+  const pdfBytes=Buffer.from(await pdf.arrayBuffer());assert.equal(pdfBytes.subarray(0,5).toString(),'%PDF-');
+  assert.equal((pdfBytes.toString('latin1').match(/\/Type \/Page\b/g)||[]).length,2,'one PDF page per saved heat');
+  const word=await sheet('docx');assert.equal(word.status,200);assert.match(word.headers.get('content-disposition'),/heat-sheet-Under-12-Boys-25m-Freestyle\.docx/);
+  const xml=zipEntry(Buffer.from(await word.arrayBuffer()),'word/document.xml');
+  for(const text of ['Aarna Sawant','Second Freestyler','Third Freestyler','Heat 1 of 2','Heat 2 of 2','Time (mm:ss.hh)','— empty lane —'])assert.ok(xml.includes(text),text);
+  assert.equal((await api('/api/admin/heat-sheet?format=txt&eventKey='+encodeURIComponent(key))).status,400);
+  assert.equal((await api('/api/admin/heat-sheet?format=pdf&eventKey=bad')).status,400);
+  assert.equal((await api('/api/admin/heat-sheet?format=pdf&eventKey='+encodeURIComponent(eventKey('Under-12','Girls','25m Freestyle')))).status,404);
  });
 });

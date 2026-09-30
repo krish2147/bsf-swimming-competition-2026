@@ -10,6 +10,7 @@ const {CATEGORIES,categoryForDob,eventKey,parseEventKey}=require('./src/competit
 
 const {registrationEvents,registrationRow,registrationColumns}=require('./src/admin-data');
 const {planHeats}=require('./src/heats');
+const {heatSheetPdf,heatSheetDocx,buildHeatSheet}=require('./src/heat-sheets');
 const {requiresFloaters}=require('./public/floater-policy');
 
 const app=express();
@@ -317,6 +318,22 @@ app.get('/api/admin/race-card',requireAdmin,async(req,res)=>{
   const rows=await q(`SELECT re.heat_no,re.lane_no,r.registration_id,r.full_name,r.school_name,te.timing_text,te.status,te.updated_at FROM race_entries re JOIN registrations r ON r.registration_id=re.registration_id LEFT JOIN timing_entries te ON te.event_key=re.event_key AND te.heat_no=re.heat_no AND te.registration_id=re.registration_id WHERE re.event_key=$1 AND re.heat_no=$2 ORDER BY re.lane_no`,[ek,heat]);
   const hc=(await q('SELECT COALESCE(MAX(heat_no),0)::int c FROM race_entries WHERE event_key=$1',[ek]))[0];
   res.json({rows,heatCount:hc.c});
+});
+
+// Printable heat sheets (PDF or Word), one page per heat with blank Time columns for timekeepers.
+app.get('/api/admin/heat-sheet',requireAdmin,async(req,res)=>{
+  const ek=req.query.eventKey,format=req.query.format;
+  if(!validEventKey(ek))return res.status(400).json({error:'Select a valid event first.'});
+  if(!['pdf','docx'].includes(format))return res.status(400).json({error:'Choose PDF or Word format.'});
+  const rows=await q('SELECT re.heat_no,re.lane_no,r.registration_id,r.full_name,r.school_name FROM race_entries re JOIN registrations r ON r.registration_id=re.registration_id WHERE re.event_key=$1 ORDER BY re.heat_no,re.lane_no',[ek]);
+  if(!rows.length)return res.status(404).json({error:'No heats are saved for this event yet. Build and save heats first.'});
+  const {category,gender,event}=parseEventKey(ek),label=CATEGORIES.find(c=>c.name===category)?.eventLabels?.[event]||event;
+  const printedAt=new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  const sheet=buildHeatSheet(rows,`${category} • ${gender} • ${label}`,printedAt);
+  const file=`heat-sheet-${[category,gender,event].join('-').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'')}.${format}`;
+  res.set('Content-Type',format==='pdf'?'application/pdf':'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  res.set('Content-Disposition',`attachment; filename="${file}"`);
+  res.send(format==='pdf'?await heatSheetPdf(sheet):await heatSheetDocx(sheet));
 });
 
 // Shared by the paged dashboard list and the CSV download so both always match the same filters.
