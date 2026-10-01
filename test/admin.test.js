@@ -171,9 +171,9 @@ test('admin end-to-end API regression',async t=>{
    assert.equal((await query('SELECT COUNT(*)::int n FROM registrations')).rows[0].n,before,'nothing saved after closing');
    const retry=await submit(key);assert.equal(retry.status,200);assert.equal(retry.body.registrationId,saved.registrationId);assert.equal(retry.body.duplicateSafe,true);
    delete process.env.REGISTRATION_CLOSES_AT;
-   assert.equal((await (await fetch(base+'/api/config')).json()).registrationOpen,false,'closed by default since the morning of 1 October');
+   assert.equal((await (await fetch(base+'/api/config')).json()).registrationOpen,Date.now()<Date.parse('2026-10-02T00:00:00+05:30'),'by default open until midnight at the end of 1 October IST');
    process.env.REGISTRATION_CLOSES_AT='not a date';
-   assert.equal((await (await fetch(base+'/api/config')).json()).registrationClosesAt,'2026-10-01T02:30:00.000Z','invalid setting falls back to 8:00 AM IST on 1 October');
+   assert.equal((await (await fetch(base+'/api/config')).json()).registrationClosesAt,'2026-10-01T18:30:00.000Z','invalid setting falls back to midnight at the end of 1 October IST');
   }finally{process.env.REGISTRATION_CLOSES_AT=previous}
  });
 });
