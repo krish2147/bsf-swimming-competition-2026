@@ -149,12 +149,15 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
     process.env.REGISTRATION_CLOSES_AT=new Date(Date.now()-1000).toISOString();
     await page.goto(base+'/register.html');await page.locator('.registration-closed').first().waitFor();assert.equal(await page.locator('#form').isHidden(),true);
     await page.screenshot({path:path.join(artifacts,'registration-closed.png')});
+    assert.equal(await page.locator('.registration-extended').count(),0,'no extension line once closed');
     await page.goto(base+'/');await page.locator('.registration-closed').first().waitFor();
     assert.equal(await page.locator('.registration-closed a').first().getAttribute('href'),'/find-ticket.html');
     process.env.REGISTRATION_CLOSES_AT='2100-01-02T00:00:00+05:30';
     await page.goto(base+'/register.html');await page.waitForFunction(()=>!document.getElementById('submitBtn').disabled);
     assert.equal(await page.locator('#form').isVisible(),true);assert.equal(await page.locator('.registration-closed').count(),0);
     assert.match(await page.locator('.registration-deadline time').first().textContent(),/^1 January 2100$/,'deadline notice follows the configured date');
+    assert.equal(await page.locator('.registration-extended').first().textContent(),'Registration extended by one day!');assert.equal(await page.locator('.registration-extended').first().isVisible(),true);
+    await page.locator('.registration-deadline').first().screenshot({path:path.join(artifacts,'registration-extended.png')});
     assert.deepEqual(errors,[],'registration closed console errors');
     console.log('PASS registration closes automatically: closed notice + hidden form after the deadline; open form and configured date before it');
    }finally{process.env.REGISTRATION_CLOSES_AT=previous;await context.close()}

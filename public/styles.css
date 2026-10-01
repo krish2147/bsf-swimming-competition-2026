@@ -72,3 +72,4 @@ nav.co-branded-header .nav-cta{margin-left:0}
 @media(max-width:600px){.heat-builder td{padding:10px 6px}.heat-builder td input{width:52px;padding:8px 6px}}
 .heat-sheet-download{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}.heat-sheet-download .row{margin-top:10px}
 .notice.registration-deadline.registration-closed{background:#fff4e5;border-color:#f3c98b;color:#7a4a00}
+.registration-extended{display:block;font-weight:800;color:#0b7a4b;margin-bottom:4px}
