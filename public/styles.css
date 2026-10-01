@@ -81,3 +81,4 @@ nav.co-branded-header .nav-cta{margin-left:0}
 .registration-closed-note{font-size:14px;color:var(--muted)}
 .registration-closed-actions{display:flex;gap:10px;margin-top:20px}
 .registration-closed-actions>*{flex:1}
+.dob-preview{font-size:14px;color:var(--muted)}.dob-events{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:8px 0 14px}.dob-events label{display:flex;gap:10px;align-items:center;padding:6px 0;font-weight:600}
