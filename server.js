@@ -75,7 +75,19 @@ app.get('/health',async(req,res)=>{
   catch(e){res.status(503).json({ok:false})}
 });
 
+// Registration closes automatically at the end of 1 October 2026 (IST). Override with REGISTRATION_CLOSES_AT
+// (an ISO date-time, e.g. 2026-10-03T00:00:00+05:30) in the environment to extend or reopen without a code change.
+const DEFAULT_REGISTRATION_CLOSES_AT='2026-10-02T00:00:00+05:30';
+function registrationClosesAt(){
+  const configured=new Date(process.env.REGISTRATION_CLOSES_AT||DEFAULT_REGISTRATION_CLOSES_AT);
+  return Number.isNaN(configured.getTime())?new Date(DEFAULT_REGISTRATION_CLOSES_AT):configured;
+}
+const registrationOpen=()=>Date.now()<registrationClosesAt().getTime();
+const REGISTRATION_CLOSED_MESSAGE='Registration for the competition is now closed. If you already registered, use Find My Ticket to get your ticket.';
+
 app.get('/api/config',(req,res)=>res.json({
+  registrationOpen:registrationOpen(),
+  registrationClosesAt:registrationClosesAt().toISOString(),
   categories:CATEGORIES,
   payeeName:process.env.PAYEE_NAME||'BARODA SWIM FRONT',
   upiId:process.env.UPI_ID||'',
@@ -121,6 +133,8 @@ app.post('/api/register',upload.fields([{name:'participantPhoto',maxCount:1},{na
     if(!b.idempotencyKey)return res.status(400).json({error:'Missing submission key.'});
     const old=(await q('SELECT registration_id,ticket_token FROM registrations WHERE idempotency_key=$1',[b.idempotencyKey]))[0];
     if(old)return res.json({ok:true,registrationId:old.registration_id,ticketToken:old.ticket_token,duplicateSafe:true});
+    // Checked after the duplicate lookup so a retry of a registration saved before closing still returns its ticket.
+    if(!registrationOpen())return res.status(403).json({error:REGISTRATION_CLOSED_MESSAGE,code:'REGISTRATION_CLOSED'});
     const amount=individuals.length*300+(relay?800:0);
     const registrationId=`BSF26-${Date.now().toString().slice(-7)}-${Math.floor(100+Math.random()*900)}`;
     const ticketToken=uuidv4();
@@ -165,7 +179,7 @@ app.get('/api/ticket/:token',async(req,res)=>{
   const r=(await q('SELECT registration_id,ticket_token,full_name,school_name,age_category,gender,events_json,amount,payment_status FROM registrations WHERE ticket_token=$1',[req.params.token]))[0];
   if(!r)return res.status(404).json({error:'Ticket not found'});
   const scanUrl=`${BASE_URL}/admin/checkin.html?token=${encodeURIComponent(r.ticket_token)}`;
-  res.json({registrationId:r.registration_id,fullName:r.full_name,schoolName:r.school_name,category:r.age_category,gender:r.gender,events:registrationEvents(r.events_json),amount:r.amount,paymentStatus:r.payment_status,requiresFloaters:requiresFloaters(CATEGORIES.find(c=>c.name===r.age_category),registrationEvents(r.events_json)),eventLabels:CATEGORIES.find(c=>c.name===r.age_category)?.eventLabels||{},competitionDate:'4 October 2026',registrationDeadline:'30 September 2026',venue:'Vadodara, Gujarat',checkinUrl:scanUrl,qrDataUrl:await QRCode.toDataURL(scanUrl,{margin:4,width:720}),token:r.ticket_token});
+  res.json({registrationId:r.registration_id,fullName:r.full_name,schoolName:r.school_name,category:r.age_category,gender:r.gender,events:registrationEvents(r.events_json),amount:r.amount,paymentStatus:r.payment_status,requiresFloaters:requiresFloaters(CATEGORIES.find(c=>c.name===r.age_category),registrationEvents(r.events_json)),eventLabels:CATEGORIES.find(c=>c.name===r.age_category)?.eventLabels||{},competitionDate:'4 October 2026',registrationDeadline:'1 October 2026',venue:'Vadodara, Gujarat',checkinUrl:scanUrl,qrDataUrl:await QRCode.toDataURL(scanUrl,{margin:4,width:720}),token:r.ticket_token});
 });
 
 app.post('/api/ticket-recovery',async(req,res)=>{

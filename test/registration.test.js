@@ -6,6 +6,7 @@ process.env.DATABASE_URL='postgres://unused:unused@localhost/unused';
 process.env.ADMIN_PIN='test-pin';
 process.env.SESSION_SECRET='test-only-session-secret';
 process.env.REGISTRATION_EVENTS_DEBUG='true';
+process.env.REGISTRATION_CLOSES_AT||='2100-01-01T00:00:00+05:30';
 const db=require('../src/db');
 const pg=new PGlite();
 let failTable=null;

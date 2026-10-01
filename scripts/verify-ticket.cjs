@@ -22,7 +22,7 @@ const {start,close}=require('../test-support/admin-harness.cjs');
    const response=await fetch(base+'/api/register',{method:'POST',body});assert.equal(response.status,200);const registration=await response.json();
    const apiUrl=base+'/api/ticket/'+registration.ticketToken,ticket=await (await fetch(apiUrl)).json(),again=await (await fetch(apiUrl)).json();
    assert.equal(ticket.qrDataUrl,again.qrDataUrl);assert.equal(ticket.checkinUrl,again.checkinUrl);assert.equal(new URL(ticket.checkinUrl).searchParams.get('token'),registration.ticketToken);
-   assert.equal(ticket.registrationDeadline,'30 September 2026');assert.equal(ticket.competitionDate,'4 October 2026');assert.equal(ticket.venue,'Vadodara, Gujarat');assert.equal(ticket.paymentStatus,'Pending');
+   assert.equal(ticket.registrationDeadline,'1 October 2026');assert.equal(ticket.competitionDate,'4 October 2026');assert.equal(ticket.venue,'Vadodara, Gujarat');assert.equal(ticket.paymentStatus,'Pending');
    const context=await browser.newContext({viewport:{width,height},isMobile:width<600,hasTouch:width<600,acceptDownloads:true});context.setDefaultTimeout(20000);
    const page=await context.newPage(),errors=[],walletRequests=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});page.on('request',r=>{if(r.url().includes('/api/wallet/'))walletRequests.push(r.url())});
    // Ensure the download stays unavailable until required assets load.
