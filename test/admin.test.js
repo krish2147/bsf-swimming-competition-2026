@@ -37,6 +37,7 @@ test('admin end-to-end API regression',async t=>{
   for(const url of ['/api/admin/payment-status','/api/admin/timing','/api/admin/result','/api/admin/publish-event','/api/admin/unpublish-event','/api/admin/checkin/'+token,'/api/admin/seed-heats'])assert.equal((await api(url,{},false)).status,401,url);
   assert.equal((await api('/api/admin/heat-builder?eventKey='+encodeURIComponent(key),null,false)).status,401);assert.equal((await api('/api/admin/save-heats',{eventKey:key,entries:[]},false)).status,401);
   assert.equal((await api('/api/admin/registrations/'+id+'/details',{fullName:'X',schoolName:'Y'},false)).status,401);
+  assert.equal((await api('/api/admin/registrations/'+id+'/dob',{dob:'2019-05-19'},false)).status,401);
   assert.equal((await api('/api/admin/heat-sheet?format=pdf&eventKey='+encodeURIComponent(key),null,false)).status,401);
   for(const kind of ['photo','proof'])assert.equal((await fetch(base+`/api/media/${id}/${kind}`)).status,401);
   assert.equal((await api('/api/admin/login',{pin:'wrong'},false)).status,403);
@@ -175,5 +176,31 @@ test('admin end-to-end API regression',async t=>{
    process.env.REGISTRATION_CLOSES_AT='not a date';
    assert.equal((await (await fetch(base+'/api/config')).json()).registrationClosesAt,'2026-10-01T18:30:00.000Z','invalid setting falls back to midnight at the end of 1 October IST');
   }finally{process.env.REGISTRATION_CLOSES_AT=previous}
+ });
+ await t.test('correct date of birth: category, events, fee and heats follow; preview never saves',async()=>{
+  const twin=await register({fullName:'Nihit Test',events:JSON.stringify(['25m Freestyle','50m Freestyle'])}),rid=twin.registrationId;
+  const freestyle12=eventKey('Under-12','Boys','25m Freestyle');
+  assert.equal((await api('/api/admin/seed-heats',{eventKey:freestyle12,lanes:6})).status,200);
+  assert.ok((await query('SELECT 1 FROM race_entries WHERE registration_id=$1',[rid])).rows.length,'in an Under-12 heat before the fix');
+  const dobApi=(body,preview)=>api('/api/admin/registrations/'+encodeURIComponent(rid)+'/dob'+(preview?'?preview=1':''),body);
+  const row=async()=>(await query(`SELECT to_char(dob,'YYYY-MM-DD') dob,age_category,events_json,amount FROM registrations WHERE registration_id=$1`,[rid])).rows[0];
+  const need=await dobApi({dob:'2019-05-19'},true);
+  assert.equal(need.status,200);assert.equal(need.body.needsEvents,true);assert.equal(need.body.code,'EVENTS_NEED_UPDATE');
+  assert.equal((await dobApi({dob:'2019-05-19'})).status,409,'saving without choosing events is refused');assert.equal(need.body.category,'Under-8');assert.equal(need.body.previousCategory,'Under-12');
+  assert.deepEqual(need.body.keep,['25m Freestyle']);assert.ok(need.body.validEvents.includes('25m Freestyle Kick with Board'));
+  const preview=await dobApi({dob:'2019-05-19',events:['25m Freestyle','25m Backstroke']},true);
+  assert.equal(preview.status,200);assert.equal(preview.body.amount,600);assert.equal((await row()).dob,'2015-05-01','preview does not save');
+  const saved=await dobApi({dob:'2019-05-19',events:['25m Freestyle','25m Backstroke']});
+  assert.equal(saved.status,200);assert.equal(saved.body.changed,true);assert.equal(saved.body.removedHeatEntries,1);
+  assert.deepEqual(await row(),{dob:'2019-05-19',age_category:'Under-8',events_json:['25m Freestyle','25m Backstroke'],amount:600});
+  assert.equal((await query('SELECT COUNT(*)::int n FROM race_entries WHERE registration_id=$1',[rid])).rows[0].n,0,'old Under-12 heat entry removed');
+  assert.equal((await (await fetch(base+'/api/ticket/'+twin.ticketToken)).json()).category,'Under-8','ticket shows the new category');
+  const same=await dobApi({dob:'2019-06-01'});assert.equal(same.status,200,'same category keeps events without asking');assert.equal((await row()).dob,'2019-06-01');
+  assert.equal((await dobApi({dob:'2019-06-01'})).body.changed,false);
+  for(const [body,status] of [[{dob:'2099-01-01'},400],[{dob:'2019-02-30'},400],[{dob:'19-05-2019'},400],[{dob:'2000-01-01'},400],[{dob:'2019-05-19',events:['50m Freestyle']},400],[{dob:'2019-05-19',events:[]},400],[{},400]])assert.equal((await dobApi(body)).status,status,JSON.stringify(body));
+  assert.equal((await api('/api/admin/registrations/NOPE/dob',{dob:'2019-05-19'})).status,404);
+  assert.equal((await row()).dob,'2019-06-01','rejected requests change nothing');
+  const audit=(await query("SELECT details_json FROM admin_audit WHERE action='EDIT_DOB' AND entity_key=$1 ORDER BY id",[rid])).rows;
+  assert.equal(audit.length,2);assert.deepEqual(audit[0].details_json.category,{from:'Under-12',to:'Under-8'});assert.deepEqual(audit[0].details_json.amount,{from:600,to:600});
  });
 });

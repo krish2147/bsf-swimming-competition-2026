@@ -423,6 +423,42 @@ app.post('/api/admin/registrations/:registrationId/details',requireAdmin,async(r
   res.json({ok:true,changed:true,fullName:next.full_name,schoolName:next.school_name});
 });
 
+// Correct a participant's date of birth. Recalculates the age category and fee; when the current events don't exist in the
+// new category the admin must choose new ones (409 EVENTS_NEED_UPDATE; a preview answers 200 with needsEvents). Heat/timing/result rows for events the swimmer is no
+// longer entered in are removed. ?preview=1 returns the outcome without saving.
+app.post('/api/admin/registrations/:registrationId/dob',requireAdmin,async(req,res)=>{
+  const registrationId=String(req.params.registrationId||'').trim(),{dob,events}=req.body||{},preview=req.query.preview==='1';
+  const date=new Date(dob);
+  if(typeof dob!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(dob)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==dob||date>new Date())return res.status(400).json({error:'Enter a valid date of birth.'});
+  const c=categoryForDob(dob);
+  if(!c)return res.status(400).json({error:'This date of birth is not eligible for any age category.'});
+  const existing=(await q(`SELECT to_char(dob,'YYYY-MM-DD') dob,age_category,gender,events_json,amount FROM registrations WHERE registration_id=$1`,[registrationId]))[0];
+  if(!existing)return res.status(404).json({error:'Registration not found.'});
+  const current=registrationEvents(existing.events_json),keep=current.filter(e=>c.events.includes(e));
+  const summary={category:c.name,previousCategory:existing.age_category,previousDob:existing.dob,validEvents:c.events,eventLabels:c.eventLabels||{},previousAmount:existing.amount};
+  let chosen;
+  if(events!==undefined){
+    if(!Array.isArray(events)||!events.length||events.some(e=>typeof e!=='string'||!c.events.includes(e))||new Set(events).size!==events.length)return res.status(400).json({error:`Choose at least one ${c.name} event; duplicates are not allowed.`});
+    chosen=events;
+  }else if(current.length&&keep.length===current.length)chosen=current;
+  else{const need={...summary,code:'EVENTS_NEED_UPDATE',needsEvents:true,keep,error:`Some events are not part of ${c.name}. Choose the ${c.name} events for this swimmer.`};return preview?res.json({ok:true,preview,...need}):res.status(409).json(need)}
+  const individuals=chosen.filter(e=>e!=='4×50m Freestyle Relay'),relay=chosen.includes('4×50m Freestyle Relay');
+  if(individuals.length>4)return res.status(400).json({error:'Maximum 4 individual events allowed.'});
+  const amount=individuals.length*300+(relay?800:0),validKeys=chosen.map(e=>eventKey(c.name,existing.gender,e));
+  const result={...summary,dob,events:chosen,amount};
+  const unchanged=existing.dob===dob&&existing.age_category===c.name&&JSON.stringify(current)===JSON.stringify(chosen)&&existing.amount===amount;
+  if(preview||unchanged)return res.json({ok:true,preview,changed:false,...result});
+  let removedHeatEntries=0;
+  await withTransaction(async cdb=>{
+    await cdb.query('UPDATE registrations SET dob=$1,age_category=$2,events_json=$3::jsonb,amount=$4 WHERE registration_id=$5',[dob,c.name,JSON.stringify(chosen),amount,registrationId]);
+    removedHeatEntries=(await cdb.query('DELETE FROM race_entries WHERE registration_id=$1 AND NOT (event_key = ANY($2::text[]))',[registrationId,validKeys])).rowCount;
+    await cdb.query('DELETE FROM timing_entries WHERE registration_id=$1 AND NOT (event_key = ANY($2::text[]))',[registrationId,validKeys]);
+    await cdb.query('DELETE FROM result_entries WHERE registration_id=$1 AND NOT (event_key = ANY($2::text[]))',[registrationId,validKeys]);
+  });
+  await audit('EDIT_DOB','registration',registrationId,{dob:{from:existing.dob,to:dob},category:{from:existing.age_category,to:c.name},events:{from:current,to:chosen},amount:{from:existing.amount,to:amount},removedHeatEntries},req.session.operator);
+  res.json({ok:true,changed:true,...result,removedHeatEntries});
+});
+
 app.delete('/api/admin/registrations/:registrationId',requireAdmin,async(req,res)=>{
   const registrationId=String(req.params.registrationId||'').trim();
   if(!registrationId)return res.status(400).json({error:'Registration ID is required.'});

@@ -115,6 +115,18 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    await page.waitForFunction(()=>document.getElementById('editMessage').textContent.startsWith('Saved.'));
    assert.ok((await page.locator('#participantDialog .admin-details').textContent()).includes('Aarna Sawant'));
    await page.screenshot({path:path.join(artifacts,'edit-details.png')});
+   // Correct date of birth: 2015 (Under-12) → 2021 (Under-6). 25m Backstroke isn't an Under-6 event, so events must be chosen.
+   await page.getByLabel('Date of birth',{exact:true}).fill('2021-01-01');await page.getByLabel('Date of birth',{exact:true}).dispatchEvent('change');
+   await page.waitForFunction(()=>document.getElementById('dobPreview').textContent.includes('Under-12 → Under-6'));
+   const keepFreestyle=page.locator('#dobEvents').getByLabel('25-meter Freestyle with/without Floaters');assert.equal(await keepFreestyle.isChecked(),true);
+   assert.equal(await page.locator('#dobEvents').getByLabel('25m Freestyle Kick with Board / Floaters').isChecked(),false);
+   await page.waitForFunction(()=>document.getElementById('dobPreview').textContent.includes('Fee: ₹600 → ₹300'));
+   await page.screenshot({path:path.join(artifacts,'correct-dob.png')});
+   page.once('dialog',d=>{assert.match(d.message(),/Category: Under-12 → Under-6/);d.accept()});await page.getByRole('button',{name:'Save date of birth',exact:true}).tap();
+   await page.waitForFunction(()=>document.getElementById('dobMessage').textContent.startsWith('Saved.'));
+   assert.match(await page.locator('#dobMessage').textContent(),/Under-6 · 25m Freestyle\. Fee changed ₹600 → ₹300/);
+   assert.ok((await page.locator('#participantDialog .admin-details').textContent()).includes('2021-01-01'));
+   assert.deepEqual((await query(`SELECT to_char(dob,'YYYY-MM-DD') dob,age_category,events_json,amount FROM registrations WHERE registration_id=$1`,[target])).rows[0],{dob:'2021-01-01',age_category:'Under-6',events_json:['25m Freestyle'],amount:300});
    await page.getByRole('button',{name:'Close participant details'}).tap();await page.waitForFunction(()=>document.getElementById('registrationRows').textContent.includes('Aarna Sawant'));
    assert.equal((await query('SELECT full_name FROM registrations WHERE registration_id=$1',[target])).rows[0].full_name,'Aarna Sawant');
    assert.deepEqual(errors,[],'edit details console errors');await context.close();
