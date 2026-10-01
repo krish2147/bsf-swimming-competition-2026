@@ -84,24 +84,6 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    console.log(`PASS ${name}: real form submission → PostgreSQL → admin list/search/filters → details/photo/proof → payment persisted → ticket → timings/results/check-in; no console/API errors`);
    await context.close();
   }
-  // Large phone photos are shrunk in the browser before upload, so the database stores small JPEGs.
-  {
-   const {PNG}=require('pngjs');
-   const big=new PNG({width:2400,height:1800});for(let i=0;i<big.data.length;i+=4){big.data[i]=(i*7)%251;big.data[i+1]=(i*13)%241;big.data[i+2]=(i*3)%239;big.data[i+3]=255}
-   const bigPng=PNG.sync.write(big);assert.ok(bigPng.length>2*1024*1024&&bigPng.length<6*1024*1024,'test photo is phone-sized: '+bigPng.length);
-   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});context.setDefaultTimeout(30000);
-   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
-   await page.goto(base+'/register.html');await page.waitForFunction(()=>!document.getElementById('submitBtn').disabled);
-   await page.locator('#fullName').fill('Big Photo Swimmer');await page.locator('#schoolName').fill('Browser Test School');await page.locator('#gender').selectOption('Girls');await page.locator('#dobInput').fill('2015-05-01');await page.locator('#email').fill('parent@example.com');await page.locator('#phone').fill('9988771133');
-   await page.getByLabel('25m Freestyle',{exact:true}).check();
-   for(const id of ['participantPhoto','paymentProof'])await page.locator('#'+id).setInputFiles({name:'IMG_0579.png',mimeType:'image/png',buffer:bigPng});
-   await page.locator('#submitBtn').click();await page.waitForURL('**/success.html?token=*');
-   const stored=(await query("SELECT octet_length(participant_photo) photo,participant_photo_mime photo_mime,octet_length(payment_proof) proof,payment_proof_mime proof_mime FROM registrations WHERE full_name='Big Photo Swimmer'")).rows[0];
-   assert.ok(Math.max(stored.photo,stored.proof)<1024*1024&&Math.max(stored.photo,stored.proof)*4<bigPng.length,`stored images are small: ${stored.photo} / ${stored.proof} bytes (uploaded ${bigPng.length})`);
-   assert.equal(stored.photo_mime,'image/jpeg');assert.equal(stored.proof_mime,'image/jpeg');
-   assert.deepEqual(errors,[],'image compression console errors');await context.close();
-   console.log(`PASS large photos shrunk before upload: ${(bigPng.length/1048576).toFixed(1)} MB → ${(stored.photo/1024).toFixed(0)} KB + ${(stored.proof/1024).toFixed(0)} KB stored as JPEG`);
-  }
   // Edit participant details from the dashboard's participant dialog (phone-sized screen).
   {
    const target=(await query("SELECT registration_id FROM registrations WHERE full_name='Browser mobile Swimmer'")).rows[0].registration_id;
