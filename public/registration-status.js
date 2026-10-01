@@ -9,9 +9,9 @@
     if(!config||!config.registrationClosesAt)return config;
     const day=lastDay(config.registrationClosesAt);
     for(const notice of document.querySelectorAll('.registration-deadline')){
-      notice.replaceChildren();
+      const extended=notice.querySelector('.registration-extended');notice.replaceChildren();
       const strong=document.createElement('strong'),time=document.createElement('time');time.dateTime=day.iso;time.textContent=day.label;
-      if(config.registrationOpen){strong.textContent='Registration Deadline:';notice.append(strong,' ',time)}
+      if(config.registrationOpen){strong.textContent='Registration Deadline:';if(extended)notice.append(extended,' ');notice.append(strong,' ',time)}
       else{notice.classList.add('registration-closed');strong.textContent='Registration closed';notice.append(strong,' on ',time,'. Already registered? ');const link=document.createElement('a');link.href='/find-ticket.html';link.textContent='Find My Ticket';notice.append(link,'.')}
     }
     return config;
