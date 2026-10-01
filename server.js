@@ -75,9 +75,9 @@ app.get('/health',async(req,res)=>{
   catch(e){res.status(503).json({ok:false})}
 });
 
-// Registration closes automatically at the end of 1 October 2026 (IST). Override with REGISTRATION_CLOSES_AT
-// (an ISO date-time, e.g. 2026-10-03T00:00:00+05:30) in the environment to extend or reopen without a code change.
-const DEFAULT_REGISTRATION_CLOSES_AT='2026-10-02T00:00:00+05:30';
+// Registration was closed by the organisers on the morning of 1 October 2026 (IST). Override with REGISTRATION_CLOSES_AT
+// (an ISO date-time, e.g. 2026-10-03T00:00:00+05:30) in the environment to reopen without a code change.
+const DEFAULT_REGISTRATION_CLOSES_AT='2026-10-01T08:00:00+05:30';
 function registrationClosesAt(){
   const configured=new Date(process.env.REGISTRATION_CLOSES_AT||DEFAULT_REGISTRATION_CLOSES_AT);
   return Number.isNaN(configured.getTime())?new Date(DEFAULT_REGISTRATION_CLOSES_AT):configured;
