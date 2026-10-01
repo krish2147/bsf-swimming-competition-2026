@@ -73,3 +73,11 @@ nav.co-branded-header .nav-cta{margin-left:0}
 .heat-sheet-download{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}.heat-sheet-download .row{margin-top:10px}
 .notice.registration-deadline.registration-closed{background:#fff4e5;border-color:#f3c98b;color:#7a4a00}
 .registration-extended{display:block;font-weight:800;color:#0b7a4b;margin-bottom:4px}
+.registration-closed-dialog{border:0;border-radius:16px;padding:30px 26px 24px;width:min(440px,calc(100vw - 32px));text-align:center;color:var(--text);background:#fff;box-shadow:0 20px 60px #0632504d}
+.registration-closed-dialog::backdrop{background:#041a2ecc}
+.registration-closed-dialog h2{font-size:28px;margin:4px 0 12px;color:#b45309}
+.registration-closed-dialog p{margin:0 0 12px;line-height:1.6}
+.registration-closed-icon{font-size:44px;margin:0!important}
+.registration-closed-note{font-size:14px;color:var(--muted)}
+.registration-closed-actions{display:flex;gap:10px;margin-top:20px}
+.registration-closed-actions>*{flex:1}
