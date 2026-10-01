@@ -134,6 +134,31 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
     console.log('PASS check-in scanner: fake camera QR → token → ticket opened → decision saved → scan next / stop; permission-denied message');
    }finally{await cameraBrowser.close()}
   }
+  // Registration closes automatically: the form is replaced by a closed notice on the register and home pages.
+  {
+   const previous=process.env.REGISTRATION_CLOSES_AT;process.env.REGISTRATION_CLOSES_AT='2026-10-02T00:00:00+05:30';
+   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true}),page=await context.newPage(),errors=[];
+   page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+   try{
+    const open=Date.now()<new Date('2026-10-02T00:00:00+05:30').getTime();
+    if(!open){
+     await page.goto(base+'/register.html');await page.locator('.registration-closed').first().waitFor();
+     assert.equal(await page.locator('#form').isHidden(),true);
+     assert.match(await page.locator('.registration-closed').first().textContent(),/Registration closed on 1 October 2026\. Already registered\? Find My Ticket\./);
+    }
+    process.env.REGISTRATION_CLOSES_AT=new Date(Date.now()-1000).toISOString();
+    await page.goto(base+'/register.html');await page.locator('.registration-closed').first().waitFor();assert.equal(await page.locator('#form').isHidden(),true);
+    await page.screenshot({path:path.join(artifacts,'registration-closed.png')});
+    await page.goto(base+'/');await page.locator('.registration-closed').first().waitFor();
+    assert.equal(await page.locator('.registration-closed a').first().getAttribute('href'),'/find-ticket.html');
+    process.env.REGISTRATION_CLOSES_AT='2100-01-02T00:00:00+05:30';
+    await page.goto(base+'/register.html');await page.waitForFunction(()=>!document.getElementById('submitBtn').disabled);
+    assert.equal(await page.locator('#form').isVisible(),true);assert.equal(await page.locator('.registration-closed').count(),0);
+    assert.match(await page.locator('.registration-deadline time').first().textContent(),/^1 January 2100$/,'deadline notice follows the configured date');
+    assert.deepEqual(errors,[],'registration closed console errors');
+    console.log('PASS registration closes automatically: closed notice + hidden form after the deadline; open form and configured date before it');
+   }finally{process.env.REGISTRATION_CLOSES_AT=previous;await context.close()}
+  }
   // Hostile legacy strings must be inert on every desk, including the existing ticket.
   const legacy=(await query('SELECT registration_id,ticket_token FROM registrations LIMIT 1')).rows[0];
   await query('UPDATE registrations SET full_name=$1,school_name=$1,events_json=$2::jsonb WHERE registration_id=$3',["<img src=x onerror=\"window.adminXss=true\">",JSON.stringify({bad:'legacy'}),legacy.registration_id]);

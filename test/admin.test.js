@@ -153,4 +153,25 @@ test('admin end-to-end API regression',async t=>{
   const rows=(await query('SELECT heat_no,COUNT(*)::int n,MAX(lane_no)::int top FROM race_entries WHERE event_key=$1 GROUP BY heat_no ORDER BY heat_no',[butterfly])).rows;
   assert.deepEqual(rows,[{heat_no:1,n:6,top:6},{heat_no:2,n:4,top:4},{heat_no:3,n:3,top:3}]);
  });
+ await t.test('registration closes automatically at the configured time; retries of saved registrations still work',async()=>{
+  const previous=process.env.REGISTRATION_CLOSES_AT,key=crypto.randomUUID();
+  const submit=async idempotencyKey=>{
+   const body=new FormData();for(const [k,v] of Object.entries({fullName:'Late Swimmer',schoolName:'Test School',gender:'Boys',dob:'2015-05-01',email:'parent@example.com',phone:'9988776655',events:JSON.stringify(['25m Freestyle']),idempotencyKey}))body.set(k,v);
+   body.set('participantPhoto',new Blob(['photo bytes'],{type:'image/png'}),'photo.png');body.set('paymentProof',new Blob(['proof bytes'],{type:'image/jpeg'}),'proof.jpg');
+   const response=await fetch(base+'/api/register',{method:'POST',body});return {status:response.status,body:await response.json()};
+  };
+  try{
+   const saved=await register({idempotencyKey:key,fullName:'Just In Time'});
+   assert.equal((await (await fetch(base+'/api/config')).json()).registrationOpen,true);
+   process.env.REGISTRATION_CLOSES_AT=new Date(Date.now()-1000).toISOString();
+   const config=await (await fetch(base+'/api/config')).json();assert.equal(config.registrationOpen,false);
+   const before=(await query('SELECT COUNT(*)::int n FROM registrations')).rows[0].n;
+   const late=await submit(crypto.randomUUID());
+   assert.equal(late.status,403);assert.equal(late.body.code,'REGISTRATION_CLOSED');assert.match(late.body.error,/closed/);
+   assert.equal((await query('SELECT COUNT(*)::int n FROM registrations')).rows[0].n,before,'nothing saved after closing');
+   const retry=await submit(key);assert.equal(retry.status,200);assert.equal(retry.body.registrationId,saved.registrationId);assert.equal(retry.body.duplicateSafe,true);
+   process.env.REGISTRATION_CLOSES_AT='not a date';
+   assert.equal((await (await fetch(base+'/api/config')).json()).registrationClosesAt,'2026-10-01T18:30:00.000Z','invalid setting falls back to end of 1 October IST');
+  }finally{process.env.REGISTRATION_CLOSES_AT=previous}
+ });
 });

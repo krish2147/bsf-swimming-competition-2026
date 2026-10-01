@@ -75,7 +75,19 @@ app.get('/health',async(req,res)=>{
   catch(e){res.status(503).json({ok:false})}
 });
 
+// Registration closes automatically at the end of 1 October 2026 (IST). Override with REGISTRATION_CLOSES_AT
+// (an ISO date-time, e.g. 2026-10-03T00:00:00+05:30) in the environment to extend or reopen without a code change.
+const DEFAULT_REGISTRATION_CLOSES_AT='2026-10-02T00:00:00+05:30';
+function registrationClosesAt(){
+  const configured=new Date(process.env.REGISTRATION_CLOSES_AT||DEFAULT_REGISTRATION_CLOSES_AT);
+  return Number.isNaN(configured.getTime())?new Date(DEFAULT_REGISTRATION_CLOSES_AT):configured;
+}
+const registrationOpen=()=>Date.now()<registrationClosesAt().getTime();
+const REGISTRATION_CLOSED_MESSAGE='Registration for the competition is now closed. If you already registered, use Find My Ticket to get your ticket.';
+
 app.get('/api/config',(req,res)=>res.json({
+  registrationOpen:registrationOpen(),
+  registrationClosesAt:registrationClosesAt().toISOString(),
   categories:CATEGORIES,
   payeeName:process.env.PAYEE_NAME||'BARODA SWIM FRONT',
   upiId:process.env.UPI_ID||'',
@@ -121,6 +133,8 @@ app.post('/api/register',upload.fields([{name:'participantPhoto',maxCount:1},{na
     if(!b.idempotencyKey)return res.status(400).json({error:'Missing submission key.'});
     const old=(await q('SELECT registration_id,ticket_token FROM registrations WHERE idempotency_key=$1',[b.idempotencyKey]))[0];
     if(old)return res.json({ok:true,registrationId:old.registration_id,ticketToken:old.ticket_token,duplicateSafe:true});
+    // Checked after the duplicate lookup so a retry of a registration saved before closing still returns its ticket.
+    if(!registrationOpen())return res.status(403).json({error:REGISTRATION_CLOSED_MESSAGE,code:'REGISTRATION_CLOSED'});
     const amount=individuals.length*300+(relay?800:0);
     const registrationId=`BSF26-${Date.now().toString().slice(-7)}-${Math.floor(100+Math.random()*900)}`;
     const ticketToken=uuidv4();
