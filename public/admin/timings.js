@@ -73,3 +73,14 @@ for(const [id,format] of [['heatSheetPdf','pdf'],['heatSheetWord','docx']])docum
  if(!eventSelect.value)throw Error('Select an event first.');
  await Admin.download('/api/admin/heat-sheet?'+new URLSearchParams({eventKey:eventSelect.value,format}),'heat-sheet.'+format);
 });
+// All events: arrange every event's heats at once, and download the full heat list as one Word file.
+document.getElementById('seedAllHeats').onclick=run(async()=>{
+ const replaceExisting=document.getElementById('replaceAllHeats').checked,info=document.getElementById('allHeatsInfo');
+ if(!confirm(replaceExisting?'Re-arrange heats for ALL events? Heats already arranged (including manual changes) will be replaced.':'Create heats for every event that has no heats yet? Events already arranged are kept.'))return;
+ info.textContent='Arranging heats…';
+ const data=await post('/api/admin/seed-all-heats',{lanes:Number(lanes.value),replaceExisting});
+ info.textContent=`Heats created for ${data.created.length} event(s)`+(data.skipped.length?`; ${data.skipped.length} event(s) already had heats and were kept.`:'.')+' Download the full heat list to print.';
+ if(eventSelect.value){heat.value=1;await loadHeat()}
+});
+document.getElementById('downloadHeatList').onclick=run(async()=>{await Admin.download('/api/admin/heat-list.docx','bsf-full-heat-list.docx')});
+

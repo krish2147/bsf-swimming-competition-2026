@@ -84,4 +84,41 @@ function buildHeatSheet(rows,eventTitle,printedAt){
   })}))};
 }
 
-module.exports={heatSheetPdf,heatSheetDocx,buildHeatSheet};
+// One Word file with every event: a summary page, then each event on a new page with all its heats stacked
+// (each heat's table kept together on one page) and blank Time columns. events: [{eventTitle, heats, notPlaced:[{fullName,schoolName,registrationId}]}]
+function heatListDocx(events,printedAt){
+  const total=10466,scale=total/COLUMNS.reduce((sum,[,w])=>sum+w,0),widths=COLUMNS.map(([,w])=>Math.round(w*scale));
+  const border={style:BorderStyle.SINGLE,size:6,color:'8FA3B8'},borders={top:border,bottom:border,left:border,right:border};
+  const text=(value,options={})=>new TextRun({text:String(value),color:'122B45',...options});
+  const cell=(value,width,{header=false,center=false,bold=false,size=19,keepNext=false}={})=>new TableCell({width:{size:width,type:WidthType.DXA},borders,verticalAlign:VerticalAlign.CENTER,
+    shading:header?{type:ShadingType.CLEAR,color:'auto',fill:'EAF3FF'}:undefined,margins:{left:80,right:80},
+    children:[new Paragraph({keepNext,alignment:center?AlignmentType.CENTER:AlignmentType.LEFT,children:[text(value,{bold:header||bold,size:header?17:size,color:String(value).startsWith('—')?'8A98A8':'122B45'})]})]});
+  const page={size:{width:11906,height:16838},margin:{top:720,bottom:720,left:720,right:720}};
+  const logo=fs.existsSync(LOGO)?fs.readFileSync(LOGO):null;
+  const header=()=>[
+    new Paragraph({children:[...(logo?[new ImageRun({type:'jpg',data:logo,transformation:{width:48,height:48}}),new TextRun('  ')]:[]),text(COMPETITION,{bold:true,size:24})]}),
+    new Paragraph({spacing:{after:200},children:[text(`${WHEN} · Printed ${printedAt}`,{size:18,color:'607184'})]})];
+  const totalSwimmers=events.reduce((n,e)=>n+e.heats.reduce((m,h)=>m+h.lanes.filter(l=>l.registrationId).length,0),0);
+  const summaryWidths=[5400,1700,1500,1866];
+  const summary={properties:{page},children:[...header(),
+    new Paragraph({children:[text('Full Heat List',{bold:true,size:40})]}),
+    new Paragraph({spacing:{after:200},children:[text(`${events.length} event(s) · ${events.reduce((n,e)=>n+e.heats.length,0)} heat(s) · ${totalSwimmers} swimmer entries`,{size:20,color:'607184'})]}),
+    new Table({width:{size:total,type:WidthType.DXA},columnWidths:summaryWidths,rows:[
+      new TableRow({tableHeader:true,children:['Event','In heats','Heats','Not in a heat'].map((label,i)=>cell(label,summaryWidths[i],{header:true,center:i>0}))}),
+      ...events.map(e=>new TableRow({cantSplit:true,children:[e.eventTitle,String(e.heats.reduce((m,h)=>m+h.lanes.filter(l=>l.registrationId).length,0)),e.heats.length?String(e.heats.length):'Not arranged',e.notPlaced.length?String(e.notPlaced.length):'—']
+        .map((value,i)=>cell(value,summaryWidths[i],{center:i>0,bold:i===3&&e.notPlaced.length>0}))}))]})]};
+  const eventSections=events.map(e=>({properties:{page},children:[...header(),
+    new Paragraph({keepNext:true,children:[text(e.eventTitle,{bold:true,size:34})]}),
+    new Paragraph({keepNext:true,spacing:{after:120},children:[text(e.heats.length?`${e.heats.length} heat(s)`:'Heats not arranged yet — build heats on the Timings page.',{size:20,color:e.heats.length?'607184':'B45309',bold:!e.heats.length})]}),
+    ...e.heats.flatMap(heat=>{
+      const rows=[new TableRow({tableHeader:true,cantSplit:true,children:COLUMNS.map(([label],i)=>cell(label,widths[i],{header:true,center:i===0,keepNext:true}))}),
+        ...heat.lanes.map((lane,index)=>new TableRow({cantSplit:true,height:{value:560,rule:HeightRule.ATLEAST},children:cellValues(lane).map((value,i)=>cell(value,widths[i],{center:i===0,bold:i===0,size:i===0?24:19,keepNext:index<heat.lanes.length-1}))}))];
+      return [new Paragraph({keepNext:true,spacing:{before:240,after:80},children:[text(`Heat ${heat.heatNo} of ${e.heats.length}`,{bold:true,size:26,color:'1268D3'})]}),
+        new Table({width:{size:total,type:WidthType.DXA},columnWidths:widths,rows})];
+    }),
+    ...(e.notPlaced.length?[new Paragraph({spacing:{before:300},children:[text(`Not in any heat (${e.notPlaced.length}): `,{bold:true,size:20,color:'B45309'}),text(e.notPlaced.map(s=>`${s.fullName} (${s.registrationId})`).join(', '),{size:20})]})]:[]),
+  ]}));
+  return Packer.toBuffer(new Document({creator:'Baroda Swim Front',title:'Full Heat List',sections:[summary,...eventSections]}));
+}
+
+module.exports={heatSheetPdf,heatSheetDocx,buildHeatSheet,heatListDocx};
