@@ -10,7 +10,7 @@ const {CATEGORIES,categoryForDob,eventKey,parseEventKey}=require('./src/competit
 
 const {registrationEvents,registrationRow,registrationColumns}=require('./src/admin-data');
 const {planHeats}=require('./src/heats');
-const {heatSheetPdf,heatSheetDocx,buildHeatSheet}=require('./src/heat-sheets');
+const {heatSheetPdf,heatSheetDocx,buildHeatSheet,heatListDocx}=require('./src/heat-sheets');
 const {requiresFloaters}=require('./public/floater-policy');
 const {assignHeats,heatSizes}=require('./public/heat-layout');
 
@@ -334,6 +334,53 @@ app.get('/api/admin/race-card',requireAdmin,async(req,res)=>{
   const rows=await q(`SELECT re.heat_no,re.lane_no,r.registration_id,r.full_name,r.school_name,te.timing_text,te.status,te.updated_at FROM race_entries re JOIN registrations r ON r.registration_id=re.registration_id LEFT JOIN timing_entries te ON te.event_key=re.event_key AND te.heat_no=re.heat_no AND te.registration_id=re.registration_id WHERE re.event_key=$1 AND re.heat_no=$2 ORDER BY re.lane_no`,[ek,heat]);
   const hc=(await q('SELECT COALESCE(MAX(heat_no),0)::int c FROM race_entries WHERE event_key=$1',[ek]))[0];
   res.json({rows,heatCount:hc.c});
+});
+
+// Every event that has swimmers, in programme order (category order, Boys then Girls, events in category order),
+// with its registered swimmers in registration order.
+async function eventsInProgrammeOrder(){
+  const regs=await q('SELECT registration_id,full_name,school_name,gender,age_category,events_json FROM registrations ORDER BY created_at,full_name');
+  const list=[];
+  for(const c of CATEGORIES)for(const gender of ['Boys','Girls'])for(const event of c.events){
+    const swimmers=regs.filter(r=>r.age_category===c.name&&r.gender===gender&&registrationEvents(r.events_json).includes(event));
+    if(swimmers.length)list.push({key:eventKey(c.name,gender,event),title:`${c.name} • ${gender} • ${c.eventLabels?.[event]||event}`,swimmers});
+  }
+  return list;
+}
+
+// Arrange heats for every event at once (same rule as Create / Reset Heats). Events that already have heats are kept unless replaceExisting.
+app.post('/api/admin/seed-all-heats',requireAdmin,async(req,res)=>{
+  const lanes=Number(req.body?.lanes||6),replaceExisting=req.body?.replaceExisting===true;
+  if(!Number.isInteger(lanes)||lanes<1||lanes>10)return res.status(400).json({error:'Lanes per heat must be from 1 to 10.'});
+  const events=await eventsInProgrammeOrder(),existing=new Set((await q('SELECT DISTINCT event_key FROM race_entries')).map(r=>r.event_key));
+  const created=[],skipped=[];
+  await withTransaction(async c=>{
+    for(const e of events){
+      if(existing.has(e.key)&&!replaceExisting){skipped.push(e.title);continue}
+      await c.query('DELETE FROM race_entries WHERE event_key=$1',[e.key]);
+      const slots=assignHeats(e.swimmers.length,lanes);
+      for(let i=0;i<e.swimmers.length;i++)await c.query('INSERT INTO race_entries(event_key,heat_no,lane_no,registration_id) VALUES($1,$2,$3,$4)',[e.key,slots[i].heatNo,slots[i].laneNo,e.swimmers[i].registration_id]);
+      created.push({event:e.title,swimmers:e.swimmers.length,heatSizes:heatSizes(e.swimmers.length,lanes)});
+    }
+  });
+  await audit('SEED_ALL_HEATS','event',null,{lanes,replaceExisting,created:created.length,skipped:skipped.length},req.session.operator);
+  res.json({ok:true,created,skipped});
+});
+
+// One Word file with the full heat list for every event.
+app.get('/api/admin/heat-list.docx',requireAdmin,async(req,res)=>{
+  const events=await eventsInProgrammeOrder();
+  if(!events.length)return res.status(404).json({error:'No registrations yet.'});
+  const entries=await q('SELECT re.event_key,re.heat_no,re.lane_no,r.registration_id,r.full_name,r.school_name FROM race_entries re JOIN registrations r ON r.registration_id=re.registration_id ORDER BY re.event_key,re.heat_no,re.lane_no');
+  const printedAt=new Date().toLocaleString('en-IN',{timeZone:'Asia/Kolkata',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+  const list=events.map(e=>{
+    const rows=entries.filter(r=>r.event_key===e.key),placed=new Set(rows.map(r=>r.registration_id));
+    return {eventTitle:e.title,heats:rows.length?buildHeatSheet(rows,e.title,printedAt).heats:[],
+      notPlaced:e.swimmers.filter(s=>!placed.has(s.registration_id)).map(s=>({fullName:s.full_name,schoolName:s.school_name,registrationId:s.registration_id}))};
+  });
+  res.set('Content-Type','application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+  res.set('Content-Disposition',`attachment; filename="bsf-full-heat-list-${new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'})}.docx"`);
+  res.send(await heatListDocx(list,printedAt));
 });
 
 // Printable heat sheets (PDF or Word), one page per heat with blank Time columns for timekeepers.

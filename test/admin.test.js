@@ -38,6 +38,7 @@ test('admin end-to-end API regression',async t=>{
   assert.equal((await api('/api/admin/heat-builder?eventKey='+encodeURIComponent(key),null,false)).status,401);assert.equal((await api('/api/admin/save-heats',{eventKey:key,entries:[]},false)).status,401);
   assert.equal((await api('/api/admin/registrations/'+id+'/details',{fullName:'X',schoolName:'Y'},false)).status,401);
   assert.equal((await api('/api/admin/registrations/'+id+'/dob',{dob:'2019-05-19'},false)).status,401);
+  assert.equal((await api('/api/admin/seed-all-heats',{lanes:6},false)).status,401);assert.equal((await api('/api/admin/heat-list.docx',null,false)).status,401);
   assert.equal((await api('/api/admin/heat-sheet?format=pdf&eventKey='+encodeURIComponent(key),null,false)).status,401);
   for(const kind of ['photo','proof'])assert.equal((await fetch(base+`/api/media/${id}/${kind}`)).status,401);
   assert.equal((await api('/api/admin/login',{pin:'wrong'},false)).status,403);
@@ -202,5 +203,24 @@ test('admin end-to-end API regression',async t=>{
   assert.equal((await row()).dob,'2019-06-01','rejected requests change nothing');
   const audit=(await query("SELECT details_json FROM admin_audit WHERE action='EDIT_DOB' AND entity_key=$1 ORDER BY id",[rid])).rows;
   assert.equal(audit.length,2);assert.deepEqual(audit[0].details_json.category,{from:'Under-12',to:'Under-8'});assert.deepEqual(audit[0].details_json.amount,{from:600,to:600});
+ });
+ await t.test('all events: create heats for every event at once and download one full heat list',async()=>{
+  const replaced=await api('/api/admin/seed-all-heats',{lanes:6,replaceExisting:true});assert.equal(replaced.status,200);assert.equal(replaced.body.skipped.length,0);
+  const regs=(await query('SELECT registration_id,gender,age_category,events_json FROM registrations')).rows;
+  const expected=new Map();for(const r of regs)for(const e of registrationEvents(r.events_json)){const k=eventKey(r.age_category,r.gender,e);expected.set(k,(expected.get(k)||0)+1)}
+  assert.equal(replaced.body.created.length,expected.size,'one entry per event with swimmers');
+  const placed=new Map((await query('SELECT event_key,COUNT(*)::int n,COUNT(DISTINCT registration_id)::int d FROM race_entries GROUP BY event_key')).rows.map(r=>[r.event_key,r]));
+  for(const [k,n] of expected){assert.equal(placed.get(k)?.n,n,k);assert.equal(placed.get(k)?.d,n,'each swimmer once: '+k)}
+  for(const e of replaced.body.created)assert.ok(e.heatSizes.every(size=>size<=6)&&e.heatSizes.reduce((a,b)=>a+b,0)===e.swimmers,e.event);
+  const titles=replaced.body.created.map(e=>e.event);assert.deepEqual(titles,[...titles].sort((a,b)=>{const order=c=>['Under-6','Under-8','Under-10','Under-12','Under-14','Under-17'].indexOf(c.split(' • ')[0]);return order(a)-order(b)}),'programme order by category');
+  const kept=await api('/api/admin/seed-all-heats',{lanes:6});assert.equal(kept.body.created.length,0);assert.equal(kept.body.skipped.length,expected.size);
+  const late=await register({fullName:'Late Entry Swimmer',events:JSON.stringify(['25m Freestyle'])});
+  const response=await fetch(base+'/api/admin/heat-list.docx',{headers:{cookie}});assert.equal(response.status,200);
+  assert.match(response.headers.get('content-disposition'),/bsf-full-heat-list-\d{4}-\d{2}-\d{2}\.docx/);
+  const xml=zipEntry(Buffer.from(await response.arrayBuffer()),'word/document.xml');
+  for(const text of ['Full Heat List','Under-12 • Boys • 25m Freestyle','Heat 1 of','Time (mm:ss.hh)','Not in any heat (1)','Late Entry Swimmer ('+late.registrationId+')'])assert.ok(xml.includes(text),text);
+  assert.equal((xml.match(/<w:sectPr/g)||[]).length,expected.size+1,'summary page + one section per event');
+  assert.equal((await api('/api/admin/seed-all-heats',{lanes:11})).status,400);
+  assert.equal((await query("SELECT COUNT(*)::int n FROM admin_audit WHERE action='SEED_ALL_HEATS'")).rows[0].n,2);
  });
 });

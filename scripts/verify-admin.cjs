@@ -74,6 +74,10 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
     assert.equal(download.suggestedFilename(),`heat-sheet-Under-12-Boys-25m-Freestyle.${ext}`);
     assert.equal((await fs.readFile(await download.path())).subarray(0,magic.length).toString(),magic,button);
    }
+   page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Create heats for all events',exact:true}).click();
+   await page.waitForFunction(()=>/Heats created for \d+ event/.test(document.getElementById('allHeatsInfo').textContent));
+   {const [download]=await Promise.all([page.waitForEvent('download'),page.getByRole('button',{name:'Download full heat list (Word)',exact:true}).click()]);
+    assert.match(download.suggestedFilename(),/^bsf-full-heat-list-\d{4}-\d{2}-\d{2}\.docx$/);assert.equal((await fs.readFile(await download.path())).subarray(0,2).toString(),'PK');}
    page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Create / Reset Heats'}).click();await page.locator('[data-timing-row]').first().waitFor();
    const timing=page.locator(`[data-timing-row="${id}"]`);await timing.locator('.timing-value').fill('00:36.42');await timing.getByRole('button',{name:'Save',exact:true}).click();await page.waitForFunction(id=>document.querySelector(`[data-timing-row="${id}"] .timing-state`)?.textContent==='Saved ✓',id);
    await page.goto(base+'/admin/results.html');await page.waitForFunction(()=>document.getElementById('event').options.length>1);await page.locator('#event').selectOption(key);await page.locator('#p1').selectOption(id);await page.locator('[data-position="1"]').click();await page.waitForFunction(()=>document.getElementById('msg').textContent==='Saved privately.');
