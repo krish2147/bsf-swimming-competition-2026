@@ -176,6 +176,16 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
     assert.equal(await homePopup.getByRole('link',{name:'Find My Ticket'}).getAttribute('href'),'/find-ticket.html');
     await homePopup.getByRole('link',{name:'Find My Ticket'}).tap();await page.waitForURL('**/find-ticket.html');
     assert.equal(await page.getByRole('dialog').count(),0,'no popup on Find My Ticket');
+    // Admin late entry: logged-in admins still get the form (no popup) and their entry is saved.
+    await page.goto(base+'/admin/');await page.locator('#pin').fill('test-pin');await page.getByRole('button',{name:'Enter',exact:true}).tap();await page.locator('#dash:not(.hidden)').waitFor();
+    await page.goto(base+'/register.html');await page.locator('.registration-late-entry').first().waitFor();
+    assert.equal(await page.locator('#form').isVisible(),true);assert.equal(await page.locator('.registration-closed-dialog').count(),0,'no closed popup for admins');
+    await page.screenshot({path:path.join(artifacts,'admin-late-entry.png')});
+    await page.locator('#fullName').fill('Abdullah Parvezahmed Shaikh');await page.locator('#schoolName').fill('Reliance English Medium School');await page.locator('#gender').selectOption('Boys');await page.locator('#dobInput').fill('2018-01-28');await page.locator('#email').fill('parent@example.com');await page.locator('#phone').fill('9988771144');
+    await page.getByLabel('25m Freestyle',{exact:true}).check();await page.getByLabel('50m Freestyle',{exact:true}).check();
+    await page.locator('#participantPhoto').setInputFiles(path.join(__dirname,'../public/bsf-logo.jpeg'));await page.locator('#paymentProof').setInputFiles(path.join(__dirname,'../public/bsf-payment-qr.jpeg'));
+    await page.locator('#submitBtn').click();await page.waitForURL('**/success.html?token=*');
+    assert.equal((await query("SELECT age_category FROM registrations WHERE full_name='Abdullah Parvezahmed Shaikh'")).rows[0].age_category,'Under-10');
     process.env.REGISTRATION_CLOSES_AT='2100-01-02T00:00:00+05:30';
     await page.goto(base+'/register.html');await page.waitForFunction(()=>!document.getElementById('submitBtn').disabled);
     assert.equal(await page.locator('#form').isVisible(),true);assert.equal(await page.locator('.registration-closed').count(),0);

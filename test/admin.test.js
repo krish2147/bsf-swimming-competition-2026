@@ -170,7 +170,15 @@ test('admin end-to-end API regression',async t=>{
    const before=(await query('SELECT COUNT(*)::int n FROM registrations')).rows[0].n;
    const late=await submit(crypto.randomUUID());
    assert.equal(late.status,403);assert.equal(late.body.code,'REGISTRATION_CLOSED');assert.match(late.body.error,/closed/);
-   assert.equal((await query('SELECT COUNT(*)::int n FROM registrations')).rows[0].n,before,'nothing saved after closing');
+   assert.equal((await query('SELECT COUNT(*)::int n FROM registrations')).rows[0].n,before,'nothing saved after closing for the public');
+   assert.equal(config.lateEntry,false,'public visitors get no late entry');
+   assert.equal((await (await fetch(base+'/api/config',{headers:{cookie}})).json()).lateEntry,true,'logged-in admin may add late entries');
+   const lateBody=new FormData();for(const [k,v] of Object.entries({fullName:'Abdullah Late Entry',schoolName:'Reliance English Medium School',gender:'Boys',dob:'2018-01-28',email:'parent@example.com',phone:'9988776655',events:JSON.stringify(['25m Freestyle','50m Freestyle']),idempotencyKey:crypto.randomUUID()}))lateBody.set(k,v);
+   lateBody.set('participantPhoto',new Blob(['photo bytes'],{type:'image/png'}),'photo.png');lateBody.set('paymentProof',new Blob(['proof bytes'],{type:'image/jpeg'}),'proof.jpg');
+   const admitted=await fetch(base+'/api/register',{method:'POST',body:lateBody,headers:{cookie}});assert.equal(admitted.status,200,'admin late entry accepted');
+   const lateId=(await admitted.json()).registrationId;
+   assert.deepEqual((await query(`SELECT age_category,events_json,amount FROM registrations WHERE registration_id=$1`,[lateId])).rows[0],{age_category:'Under-10',events_json:['25m Freestyle','50m Freestyle'],amount:600});
+   assert.equal((await query("SELECT COUNT(*)::int n FROM admin_audit WHERE action='LATE_ENTRY' AND entity_key=$1",[lateId])).rows[0].n,1);
    const retry=await submit(key);assert.equal(retry.status,200);assert.equal(retry.body.registrationId,saved.registrationId);assert.equal(retry.body.duplicateSafe,true);
    delete process.env.REGISTRATION_CLOSES_AT;
    assert.equal((await (await fetch(base+'/api/config')).json()).registrationOpen,Date.now()<Date.parse('2026-10-02T00:00:00+05:30'),'by default open until midnight at the end of 1 October IST');

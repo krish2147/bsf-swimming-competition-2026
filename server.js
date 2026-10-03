@@ -87,6 +87,8 @@ const REGISTRATION_CLOSED_MESSAGE='Registration for the competition is now close
 
 app.get('/api/config',(req,res)=>res.json({
   registrationOpen:registrationOpen(),
+  // A logged-in admin can still add late entries through the normal form after registration closes.
+  lateEntry:!registrationOpen()&&!!req.session?.admin,
   registrationClosesAt:registrationClosesAt().toISOString(),
   categories:CATEGORIES,
   payeeName:process.env.PAYEE_NAME||'BARODA SWIM FRONT',
@@ -134,7 +136,8 @@ app.post('/api/register',upload.fields([{name:'participantPhoto',maxCount:1},{na
     const old=(await q('SELECT registration_id,ticket_token FROM registrations WHERE idempotency_key=$1',[b.idempotencyKey]))[0];
     if(old)return res.json({ok:true,registrationId:old.registration_id,ticketToken:old.ticket_token,duplicateSafe:true});
     // Checked after the duplicate lookup so a retry of a registration saved before closing still returns its ticket.
-    if(!registrationOpen())return res.status(403).json({error:REGISTRATION_CLOSED_MESSAGE,code:'REGISTRATION_CLOSED'});
+    const lateEntry=!registrationOpen();
+    if(lateEntry&&!req.session?.admin)return res.status(403).json({error:REGISTRATION_CLOSED_MESSAGE,code:'REGISTRATION_CLOSED'});
     const amount=individuals.length*300+(relay?800:0);
     const registrationId=`BSF26-${Date.now().toString().slice(-7)}-${Math.floor(100+Math.random()*900)}`;
     const ticketToken=uuidv4();
@@ -154,6 +157,7 @@ app.post('/api/register',upload.fields([{name:'participantPhoto',maxCount:1},{na
       ]);
       await cdb.query('INSERT INTO whatsapp_queue(registration_id,phone,message_type,payload_json) VALUES($1,$2,$3,$4)',[registrationId,b.phone.trim(),'ticket',{registrationId,ticketToken}]);
     });
+    if(lateEntry)await audit('LATE_ENTRY','registration',registrationId,{fullName:b.fullName.trim(),category:c.name,events},req.session.operator);
     res.json({ok:true,registrationId,ticketToken,amount});
   }catch(e){
     console.error(e);
