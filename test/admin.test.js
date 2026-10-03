@@ -231,4 +231,21 @@ test('admin end-to-end API regression',async t=>{
   assert.equal((await api('/api/admin/seed-all-heats',{lanes:11})).status,400);
   assert.equal((await query("SELECT COUNT(*)::int n FROM admin_audit WHERE action='SEED_ALL_HEATS'")).rows[0].n,2);
  });
+ await t.test('participation certificate: from competition day, with the ticket link, also via Find My Ticket',async()=>{
+  const previous=process.env.CERTIFICATES_FROM,kid=await register({fullName:'Certificate Swimmer',phone:'9876500011',dob:'2015-05-01'});
+  const cert=()=>fetch(base+'/api/certificate/'+encodeURIComponent(kid.ticketToken));
+  try{
+   process.env.CERTIFICATES_FROM=new Date(Date.now()+86400000).toISOString();
+   const early=await cert();assert.equal(early.status,403);assert.equal((await early.json()).code,'CERTIFICATE_NOT_YET_AVAILABLE');
+   const ticketEarly=await (await fetch(base+'/api/ticket/'+kid.ticketToken)).json();assert.equal(ticketEarly.certificateAvailable,false);assert.equal(ticketEarly.certificateUrl,'/api/certificate/'+kid.ticketToken);
+   process.env.CERTIFICATES_FROM=new Date(Date.now()-1000).toISOString();
+   const pdf=await cert();assert.equal(pdf.status,200);assert.equal(pdf.headers.get('content-type'),'application/pdf');
+   assert.match(pdf.headers.get('content-disposition'),/filename="BSF-Participation-Certificate-Certificate-Swimmer\.pdf"/);
+   const bytes=Buffer.from(await pdf.arrayBuffer());assert.equal(bytes.subarray(0,5).toString(),'%PDF-');assert.equal((bytes.toString('latin1').match(/\/Type \/Page\b/g)||[]).length,1);
+   assert.equal((await (await fetch(base+'/api/ticket/'+kid.ticketToken)).json()).certificateAvailable,true);
+   const found=await (await fetch(base+'/api/ticket-recovery',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:'9876500011',dob:'2015-05-01'})})).json();
+   const match=found.matches.find(m=>m.registrationId===kid.registrationId);assert.equal(match.certificateAvailable,true);assert.equal(match.certificateUrl,'/api/certificate/'+kid.ticketToken);
+   assert.equal((await fetch(base+'/api/certificate/not-a-real-token')).status,404);
+  }finally{if(previous===undefined)delete process.env.CERTIFICATES_FROM;else process.env.CERTIFICATES_FROM=previous}
+ });
 });

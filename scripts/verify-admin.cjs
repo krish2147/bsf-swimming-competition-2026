@@ -197,6 +197,26 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
     console.log('PASS registration closes automatically: closed notice + hidden form after the deadline; open form and configured date before it');
    }finally{process.env.REGISTRATION_CLOSES_AT=previous;await context.close()}
   }
+  // Participation certificate on the ticket page and Find My Ticket (parent's phone).
+  {
+   const previous=process.env.CERTIFICATES_FROM,kid=(await query("SELECT ticket_token,phone,to_char(dob,'YYYY-MM-DD') dob FROM registrations WHERE full_name='Browser tablet Swimmer'")).rows[0];
+   const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});context.setDefaultTimeout(20000);
+   const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
+   try{
+    process.env.CERTIFICATES_FROM='2100-01-01T00:00:00+05:30';
+    await page.goto(base+'/success.html?token='+kid.ticket_token);await page.locator('.certificate-note').waitFor();
+    assert.match(await page.locator('.certificate-note').textContent(),/from 1 January 2100/);assert.equal(await page.locator('#downloadCertificate').isHidden(),true);
+    process.env.CERTIFICATES_FROM=new Date(Date.now()-1000).toISOString();
+    await page.goto(base+'/success.html?token='+kid.ticket_token);const button=page.getByRole('button',{name:'Download Participation Certificate',exact:true});await button.waitFor();
+    const [certificate]=await Promise.all([page.waitForEvent('download'),button.tap()]);
+    assert.equal(certificate.suggestedFilename(),'BSF-Participation-Certificate-Browser-tablet-Swimmer.pdf');assert.equal((await fs.readFile(await certificate.path())).subarray(0,5).toString(),'%PDF-');
+    await page.goto(base+'/find-ticket.html');await page.locator('#recoveryPhone').fill(kid.phone);await page.locator('#recoveryDob').fill(kid.dob);await page.locator('#recoverySubmit').tap();
+    const link=page.getByRole('link',{name:'Download Participation Certificate'}).first();await link.waitFor();assert.equal(await link.getAttribute('href'),'/api/certificate/'+kid.ticket_token);
+    await page.screenshot({path:path.join(artifacts,'find-ticket-certificate.png'),fullPage:true});
+    assert.deepEqual(errors,[],'certificate page errors');
+    console.log('PASS participation certificate: note before competition day; download from ticket page; link on Find My Ticket');
+   }finally{if(previous===undefined)delete process.env.CERTIFICATES_FROM;else process.env.CERTIFICATES_FROM=previous;await context.close()}
+  }
   // Hostile legacy strings must be inert on every desk, including the existing ticket.
   const legacy=(await query('SELECT registration_id,ticket_token FROM registrations LIMIT 1')).rows[0];
   await query('UPDATE registrations SET full_name=$1,school_name=$1,events_json=$2::jsonb WHERE registration_id=$3',["<img src=x onerror=\"window.adminXss=true\">",JSON.stringify({bad:'legacy'}),legacy.registration_id]);
