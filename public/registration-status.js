@@ -11,10 +11,11 @@
     for(const notice of document.querySelectorAll('.registration-deadline')){
       const extended=notice.querySelector('.registration-extended');notice.replaceChildren();
       const strong=document.createElement('strong'),time=document.createElement('time');time.dateTime=day.iso;time.textContent=day.label;
-      if(config.registrationOpen){strong.textContent='Registration Deadline:';if(extended)notice.append(extended,' ');notice.append(strong,' ',time)}
+      if(config.lateEntry){notice.classList.add('registration-late-entry');strong.textContent='Admin late entry:';notice.append(strong,' registration closed to the public on ',time,'. Entries you submit here are accepted and recorded in the audit log.')}
+      else if(config.registrationOpen){strong.textContent='Registration Deadline:';if(extended)notice.append(extended,' ');notice.append(strong,' ',time)}
       else{notice.classList.add('registration-closed');strong.textContent='Registration closed';notice.append(strong,' on ',time,'. Already registered? ');const link=document.createElement('a');link.href='/find-ticket.html';link.textContent='Find My Ticket';notice.append(link,'.')}
     }
-    if(!config.registrationOpen)showClosedPopup();
+    if(!config.registrationOpen&&!config.lateEntry)showClosedPopup();
     return config;
   }).catch(()=>null);
   // Popup shown each time the home or register page is opened after registration has closed.
