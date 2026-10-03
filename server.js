@@ -477,6 +477,51 @@ app.get('/api/admin/registrations/:registrationId',requireAdmin,async(req,res)=>
   res.json({...registration,ticketUrl,qrDataUrl});
 });
 
+// Admin manual entry: add a swimmer from the dashboard (phone/email/photo/payment screenshot optional). Category and fee
+// follow the DOB; if heats already exist for an event the swimmer gets the first free lane of the last heat.
+async function placeInExistingHeats(cdb,key,registrationId){
+  const rows=(await cdb.query('SELECT heat_no,lane_no FROM race_entries WHERE event_key=$1',[key])).rows;
+  if(!rows.length)return null;
+  const lanes=Math.max(...rows.map(r=>r.lane_no)),lastHeat=Math.max(...rows.map(r=>r.heat_no)),used=new Set(rows.filter(r=>r.heat_no===lastHeat).map(r=>r.lane_no));
+  let heatNo=lastHeat,laneNo=Array.from({length:lanes},(_,i)=>i+1).find(l=>!used.has(l));
+  if(!laneNo){heatNo=lastHeat+1;laneNo=1}
+  await cdb.query('INSERT INTO race_entries(event_key,heat_no,lane_no,registration_id) VALUES($1,$2,$3,$4)',[key,heatNo,laneNo,registrationId]);
+  return {heatNo,laneNo};
+}
+app.post('/api/admin/registrations',requireAdmin,upload.fields([{name:'participantPhoto',maxCount:1},{name:'paymentProof',maxCount:1}]),async(req,res)=>{
+  const b=req.body||{},clean=value=>typeof value==='string'?value.trim().replace(/\s+/g,' '):'';
+  const fullName=clean(b.fullName),schoolName=clean(b.schoolName),phone=clean(b.phone),email=clean(b.email),note=clean(b.paymentNote);
+  if(!fullName||!schoolName)return res.status(400).json({error:'Participant name and school are required.'});
+  if(fullName.length>120||schoolName.length>120||note.length>120)return res.status(400).json({error:'Name, school and payment note must be 120 characters or fewer.'});
+  if(!['Boys','Girls'].includes(b.gender))return res.status(400).json({error:'Choose Boys or Girls.'});
+  const date=new Date(b.dob);
+  if(typeof b.dob!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(b.dob)||!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==b.dob||date>new Date())return res.status(400).json({error:'Enter a valid date of birth.'});
+  const c=categoryForDob(b.dob);
+  if(!c)return res.status(400).json({error:'This date of birth is not eligible for any age category.'});
+  let events;try{events=JSON.parse(b.events||'[]')}catch{events=null}
+  if(!Array.isArray(events)||!events.length||events.some(e=>typeof e!=='string'||!c.events.includes(e))||new Set(events).size!==events.length)return res.status(400).json({error:`Choose at least one ${c.name} event.`});
+  const individuals=events.filter(e=>e!=='4×50m Freestyle Relay'),relay=events.includes('4×50m Freestyle Relay');
+  if(individuals.length>4)return res.status(400).json({error:'Maximum 4 individual events allowed.'});
+  if(phone&&phone.replace(/\D/g,'').length<10)return res.status(400).json({error:'Enter a 10-digit phone number or leave it empty.'});
+  if(email&&(email.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)))return res.status(400).json({error:'Enter a valid email or leave it empty.'});
+  const paymentStatus=b.paymentStatus==='Verified'?'Verified':'Pending';
+  const photo=req.files?.participantPhoto?.[0],proof=req.files?.paymentProof?.[0];
+  if(b.allowDuplicate!=='true'){
+    const existing=(await q('SELECT registration_id FROM registrations WHERE lower(full_name)=lower($1) AND dob=$2',[fullName,b.dob]))[0];
+    if(existing)return res.status(409).json({code:'POSSIBLE_DUPLICATE',registrationId:existing.registration_id,error:`${fullName} (born ${b.dob}) is already registered as ${existing.registration_id}.`});
+  }
+  const amount=individuals.length*300+(relay?800:0),registrationId=`BSF26-${Date.now().toString().slice(-7)}-${Math.floor(100+Math.random()*900)}`,ticketToken=uuidv4();
+  const placements=[];
+  await withTransaction(async cdb=>{
+    await cdb.query(`INSERT INTO registrations(registration_id,ticket_token,idempotency_key,full_name,school_name,gender,dob,age_category,phone,email,events_json,amount,
+      participant_photo,participant_photo_mime,payment_proof,payment_proof_mime,payment_utr,payment_status) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11::jsonb,$12,$13,$14,$15,$16,$17,$18)`,
+      [registrationId,ticketToken,'admin-'+uuidv4(),fullName,schoolName,b.gender,b.dob,c.name,phone,email||null,JSON.stringify(events),amount,photo?.buffer||null,photo?.mimetype||null,proof?.buffer||null,proof?.mimetype||null,note||null,paymentStatus]);
+    for(const event of events){const slot=await placeInExistingHeats(cdb,eventKey(c.name,b.gender,event),registrationId);placements.push({event,...(slot||{notPlaced:true})})}
+  });
+  await audit('MANUAL_ENTRY','registration',registrationId,{fullName,category:c.name,events,amount,paymentStatus,placements},req.session.operator);
+  res.json({ok:true,registrationId,ticketToken,ticketUrl:`/success.html?token=${encodeURIComponent(ticketToken)}`,category:c.name,events,amount,paymentStatus,placements});
+});
+
 // Correct a participant's name or school (e.g. a parent's typo). Ticket, check-in, heats and results read these live.
 app.post('/api/admin/registrations/:registrationId/details',requireAdmin,async(req,res)=>{
   const registrationId=String(req.params.registrationId||'').trim(),{fullName,schoolName}=req.body||{};

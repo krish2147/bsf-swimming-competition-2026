@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS checkin_audit(id BIGSERIAL PRIMARY KEY,registration_i
 CREATE TABLE IF NOT EXISTS whatsapp_queue(id BIGSERIAL PRIMARY KEY,registration_id TEXT NOT NULL,phone TEXT NOT NULL,message_type TEXT NOT NULL,payload_json JSONB NOT NULL,status TEXT NOT NULL DEFAULT 'Pending',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 CREATE TABLE IF NOT EXISTS race_entries(id BIGSERIAL PRIMARY KEY,event_key TEXT NOT NULL,heat_no INTEGER NOT NULL,lane_no INTEGER NOT NULL,registration_id TEXT NOT NULL REFERENCES registrations(registration_id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(event_key,registration_id),UNIQUE(event_key,heat_no,lane_no));
 CREATE TABLE IF NOT EXISTS admin_audit(id BIGSERIAL PRIMARY KEY,action TEXT NOT NULL,entity_type TEXT NOT NULL,entity_key TEXT,details_json JSONB,operator TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+-- Admin manual entries may not have a photo or payment screenshot.
+ALTER TABLE registrations ALTER COLUMN participant_photo DROP NOT NULL,ALTER COLUMN participant_photo_mime DROP NOT NULL,ALTER COLUMN payment_proof DROP NOT NULL,ALTER COLUMN payment_proof_mime DROP NOT NULL;
 `)}
 async function withTransaction(fn){const c=await pool.connect();try{await c.query('BEGIN');const r=await fn(c);await c.query('COMMIT');return r}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}}
 module.exports={pool,initDb,withTransaction};
