@@ -230,8 +230,11 @@ app.post('/api/ticket-recovery',async(req,res)=>{
 
 // Live results: per event, an overall ranking across all heats from saved times (provisional), and the official podium
 // once the event is published from the Results desk.
+// Public results are closed by the organisers; set PUBLIC_RESULTS=open in the environment to show them again.
+const publicResultsOpen=()=>String(process.env.PUBLIC_RESULTS||'').toLowerCase()==='open';
 app.get('/api/public/results',async(req,res)=>{
   res.set('Cache-Control','no-store');
+  if(!publicResultsOpen())return res.json({closed:true});
   // Built from the heat list: every swimmer placed in a heat is listed (with heat and lane), plus any timed swimmer not in it.
   const timings=await q(`SELECT COALESCE(he.event_key,te.event_key) event_key,COALESCE(he.heat_no,te.heat_no) heat_no,he.lane_no,te.timing_text,te.status,r.registration_id,r.full_name,r.school_name
     FROM race_entries he FULL JOIN (SELECT * FROM timing_entries WHERE status IN ('TIME','DNS','DQ')) te ON te.event_key=he.event_key AND te.registration_id=he.registration_id
