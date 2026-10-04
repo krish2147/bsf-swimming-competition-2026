@@ -12,7 +12,7 @@ async function loadRegistrations(){
   document.getElementById('previousPage').disabled=page<=1;
   document.getElementById('nextPage').disabled=page*result.limit>=result.total;
 }
-async function overview(){const data=await api('/api/admin/overview');for(const key of ['registrations','checkedIn','paymentPending','paymentVerified','published'])document.getElementById(key).textContent=data[key]}
+async function overview(){const [data,schools]=await Promise.all([api('/api/admin/overview'),api('/api/admin/schools')]);for(const key of ['registrations','checkedIn','paymentPending','paymentVerified','published'])document.getElementById(key).textContent=data[key];document.getElementById('schoolCount').textContent=schools.count}
 async function load(){
   const me=await api('/api/admin/me');if(!me.authenticated)return;
   document.getElementById('loginBox').classList.add('hidden');document.getElementById('dash').classList.remove('hidden');
@@ -89,3 +89,16 @@ document.getElementById('showCheckedIn').onclick=run(async()=>{
   document.getElementById('registrationCount').scrollIntoView({behavior:'smooth',block:'start'});
 });
 
+// "Schools" tile: every participating school with its swimmer count, plus a CSV download.
+const schoolsDialog=document.createElement('dialog');schoolsDialog.className='admin-dialog';schoolsDialog.id='schoolsDialog';schoolsDialog.setAttribute('aria-labelledby','schoolsTitle');
+schoolsDialog.innerHTML=`<div class="admin-dialog-header"><h2 id="schoolsTitle">Schools</h2><button type="button" class="secondary admin-close" aria-label="Close schools">×</button></div>
+<div class="admin-dialog-content"><p id="schoolsSummary" class="muted"></p><a class="btn" href="/api/admin/schools.csv" download>Download schools CSV</a>
+<div class="admin-table-scroll" tabindex="0" role="region" aria-label="School list"><table><thead><tr><th>#</th><th>School</th><th>Swimmers</th><th>Checked in</th></tr></thead><tbody id="schoolRows"></tbody></table></div></div>`;
+document.body.append(schoolsDialog);
+schoolsDialog.querySelector('.admin-close').onclick=()=>schoolsDialog.close();
+document.getElementById('showSchools').onclick=run(async()=>{
+  const data=await api('/api/admin/schools');
+  document.getElementById('schoolsSummary').textContent=`${data.count} school(s) · ${data.participants} swimmer(s)`;
+  document.getElementById('schoolRows').innerHTML=data.schools.map((s,i)=>`<tr><td>${i+1}</td><td>${text(s.name)}${s.otherSpellings.length?`<div class="muted">also typed as: ${text(s.otherSpellings.join(' · '))}</div>`:''}</td><td>${s.participants}</td><td>${s.checkedIn}</td></tr>`).join('');
+  schoolsDialog.showModal();
+});

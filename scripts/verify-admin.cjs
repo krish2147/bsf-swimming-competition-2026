@@ -256,6 +256,10 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    await dialog.getByRole('button',{name:'Close add participant'}).tap();await page.waitForFunction(()=>document.getElementById('registrationRows').textContent.includes('Aum Tilavat'));
    assert.equal((await query("SELECT age_category FROM registrations WHERE full_name='Aum Tilavat'")).rows[0].age_category,'Under-12');
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   await page.locator('#showSchools').tap();const schools=page.getByRole('dialog',{name:'Schools'});await schools.waitFor();
+   await page.waitForFunction(()=>document.getElementById('schoolRows').textContent.includes('Manual Test School'));assert.match(await page.locator('#schoolsSummary').textContent(),/^\d+ school\(s\) · \d+ swimmer\(s\)$/);
+   assert.equal(await page.locator('#schoolCount').textContent(),String(await page.locator('#schoolRows tr').count()));
+   await page.screenshot({path:path.join(artifacts,'admin-schools.png')});await schools.getByRole('button',{name:'Close schools'}).tap();
    assert.deepEqual(errors,[],'manual entry console errors');await context.close();
    console.log('PASS admin manual entry: dashboard form, DOB → category events, saved and listed');
   }

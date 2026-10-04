@@ -297,6 +297,17 @@ test('admin end-to-end API regression',async t=>{
   assert.equal((await api('/api/admin/publish-event',{eventKey:key})).status,200);
   rows=await live();assert.ok(rows.length&&rows.every(r=>r.published===true),'official after publish');
  });
+ await t.test('schools: count and names, spelling variants merged, CSV download',async()=>{
+  for(const schoolName of ["St. Xavier's School",'st xaviers','ST. XAVIER\'S  SCHOOL','Navrachana Vidyani'])await register({schoolName,fullName:'School Count '+schoolName});
+  const r=await api('/api/admin/schools');assert.equal(r.status,200);
+  const xav=r.body.schools.find(s=>s.name==="St. Xavier's School");assert.ok(xav,'on a tie, the normally capitalised spelling is shown');
+  assert.equal(xav.participants,3);assert.equal(xav.otherSpellings.length,2);
+  assert.ok(r.body.schools.some(s=>s.name==='Navrachana Vidyani'&&s.participants===1));
+  assert.equal(r.body.count,r.body.schools.length);assert.equal(r.body.participants,r.body.schools.reduce((n,s)=>n+s.participants,0));
+  assert.equal((await api('/api/admin/schools',null,false)).status,401);
+  const csv=await fetch(base+'/api/admin/schools.csv',{headers:{cookie}});assert.equal(csv.status,200);const body=await csv.text();
+  assert.match(body,/Sr No,School,Participants,Checked in,Other spellings/);assert.ok(body.includes("St. Xavier's School,3,0,"));
+ });
  await t.test('live public results: standings across heats with ties, official podium after publishing',async()=>{
   const key=eventKey('Under-14','Boys','50m Freestyle');
   const kids=[];for(const n of ['P','Q','R','S'])kids.push(await register({dob:'2013-01-01',fullName:'Results Swimmer '+n,events:JSON.stringify(['50m Freestyle'])}));

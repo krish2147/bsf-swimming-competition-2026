@@ -488,6 +488,30 @@ const csvCell=value=>{
   if(/^[=+\-@\t\r]/.test(cell))cell="'"+cell; // keep spreadsheet apps from running cell text as a formula
   return /[",\r\n]/.test(cell)?`"${cell.replaceAll('"','""')}"`:cell;
 };
+// Schools taking part. Names are typed by parents, so spellings that differ only in case, spacing or
+// punctuation ("St. Xavier's" / "st xaviers") count as one school, shown with its most-used spelling.
+const schoolKey=name=>String(name||'').toLowerCase().replace(/['’`]/g,'').replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').replace(/\bschool\b|\bthe\b/g,' ').replace(/\s+/g,' ').trim();
+async function schoolSummary(){
+  const rows=await q("SELECT school_name,COUNT(*)::int participants,COUNT(*) FILTER(WHERE checkin_status='Approved')::int checked_in FROM registrations GROUP BY school_name");
+  const groups=new Map();
+  for(const r of rows){
+    const key=schoolKey(r.school_name)||String(r.school_name||'').trim().toLowerCase();
+    if(!groups.has(key))groups.set(key,{participants:0,checkedIn:0,spellings:[]});
+    const g=groups.get(key);g.participants+=r.participants;g.checkedIn+=r.checked_in;const name=String(r.school_name||'').replace(/\s+/g,' ').trim(),old=g.spellings.find(x=>x.name===name);if(old)old.n+=r.participants;else g.spellings.push({name,n:r.participants});
+  }
+  const schools=[...groups.values()].map(g=>{const plain=x=>x===x.toUpperCase()||x===x.toLowerCase()?1:0;g.spellings.sort((a,b)=>b.n-a.n||plain(a.name)-plain(b.name)||a.name.localeCompare(b.name));return {name:g.spellings[0].name,participants:g.participants,checkedIn:g.checkedIn,otherSpellings:g.spellings.slice(1).map(s=>s.name)}})
+    .sort((a,b)=>b.participants-a.participants||a.name.localeCompare(b.name));
+  return {count:schools.length,participants:schools.reduce((n,s)=>n+s.participants,0),schools};
+}
+app.get('/api/admin/schools',requireAdmin,async(req,res)=>res.json(await schoolSummary()));
+app.get('/api/admin/schools.csv',requireAdmin,async(req,res)=>{
+  const {schools}=await schoolSummary();
+  const lines=[['Sr No','School','Participants','Checked in','Other spellings'],...schools.map((s,i)=>[i+1,s.name,s.participants,s.checkedIn,s.otherSpellings.join('; ')])].map(line=>line.map(csvCell).join(','));
+  await audit('export','schools',null,{count:schools.length},req.session.operator);
+  res.set('Content-Type','text/csv; charset=utf-8');
+  res.set('Content-Disposition',`attachment; filename="bsf-schools-${new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'})}.csv"`);
+  res.send('﻿'+lines.join('\r\n')+'\r\n');
+});
 app.get('/api/admin/registrations.csv',requireAdmin,async(req,res)=>{
   const filters=req.query,invalid=invalidRegistrationFilters(filters,registrationFilterKeys);
   if(invalid)return res.status(400).json({error:invalid});
