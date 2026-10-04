@@ -268,6 +268,12 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
   await page.goto(base+'/admin/');await page.locator('#pin').fill('test-pin');await page.getByRole('button',{name:'Enter',exact:true}).click();await page.getByRole('button',{name:legacy.registration_id,exact:true}).click();
   await page.locator('#participantDialog[open]').waitFor();assert.ok((await page.locator('#participantDialog').textContent()).includes('Participant photo unavailable'));assert.ok((await page.locator('#participantDialog').textContent()).includes('No events recorded'));assert.equal(await page.evaluate(()=>window.adminXss),undefined);
   await page.screenshot({path:path.join(artifacts,'small-mobile-legacy.png')});await context.close();console.log('PASS legacy malformed events / null media / hostile text at 320px');
+  {const ctx=await browser.newContext({viewport:{width:390,height:844}}),pg=await ctx.newPage(),errors=[];pg.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+   process.env.PUBLIC_RESULTS='closed';
+   try{await pg.goto(base+'/results.html');await pg.waitForFunction(()=>document.getElementById('out').textContent.includes('Results are closed'));
+    assert.ok(!(await pg.locator('.result-pickers').isVisible()),'pickers hidden');assert.equal(await pg.locator('.live-event').count(),0);assert.deepEqual(errors,[]);
+    await pg.screenshot({path:path.join(artifacts,'results-closed.png'),fullPage:true});}finally{process.env.PUBLIC_RESULTS='open';await ctx.close()}
+   console.log('PASS public results closed: notice shown, pickers and standings hidden');}
   const anon=await browser.newContext();const anonymousPage=await anon.newPage();for(const route of ['payments','timings','results','checkin']){await anonymousPage.goto(base+`/admin/${route}.html`);await anonymousPage.waitForURL(base+'/admin/');await anonymousPage.locator('#loginBox:not(.hidden)').waitFor()}await anon.close();console.log('PASS unauthenticated admin desks redirect to login');
   console.log('Screenshots: '+artifacts);
  }finally{if(browser)await browser.close();await close()}

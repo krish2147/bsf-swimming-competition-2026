@@ -34,7 +34,9 @@
       </tbody></table></section>`;
   }
   async function load(){
-    try{const response=await fetch('/api/public/results',{cache:'no-store'});if(!response.ok)throw Error();data=await response.json();syncPickers();render();
+    try{const response=await fetch('/api/public/results',{cache:'no-store'});if(!response.ok)throw Error();const json=await response.json();
+      if(json&&json.closed){for(const el of document.querySelectorAll('.result-pickers,.live-badge,#resultsIntro'))el.classList.add('hidden');out.className='notice';out.textContent='Results are closed. Please check with the organisers at the venue.';status.textContent='';return}
+      for(const el of document.querySelectorAll('.result-pickers,.live-badge,#resultsIntro'))el.classList.remove('hidden');data=json;syncPickers();render();
       status.textContent='Updated '+new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' · refreshes automatically';
     }catch{status.textContent='Could not refresh — retrying…'}
   }

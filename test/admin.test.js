@@ -303,6 +303,8 @@ test('admin end-to-end API regression',async t=>{
   assert.equal((await api('/api/admin/seed-heats',{eventKey:key,lanes:2})).status,200);
   const slots=(await query('SELECT registration_id,heat_no FROM race_entries WHERE event_key=$1',[key])).rows,heatOf=id=>slots.find(r=>r.registration_id===id).heat_no;
   const event=async()=>(await (await fetch(base+'/api/public/results')).json()).find(e=>e.event_key===key);
+  process.env.PUBLIC_RESULTS='closed';
+  try{assert.deepEqual(await (await fetch(base+'/api/public/results')).json(),{closed:true},'results closed: nothing public')}finally{process.env.PUBLIC_RESULTS='open'}
   let e=await event();
   assert.deepEqual(e.awaiting.map(s=>s.full_name).sort(),kids.map((_,i)=>'Results Swimmer '+'PQRS'[i]),'whole heat list shown before any time');assert.ok(e.awaiting.every(s=>s.heat_no>=1&&s.lane_no>=1));assert.deepEqual(e.standings,[]);
   const times=[['35.10s','TIME'],['00:33.00','TIME'],['0:33:00','TIME'],['','DQ']];

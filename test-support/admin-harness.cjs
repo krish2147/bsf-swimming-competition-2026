@@ -6,6 +6,7 @@ process.env.SESSION_SECRET='admin-test-only-session-secret';
 process.env.NODE_ENV='test';
 // Keep registration open in tests regardless of today's date; tests that check closing override this.
 process.env.REGISTRATION_CLOSES_AT||='2100-01-01T00:00:00+05:30';
+process.env.PUBLIC_RESULTS||='open';
 const db=require('../src/db');
 const pg=new PGlite();
 async function query(sql,values=[]){
