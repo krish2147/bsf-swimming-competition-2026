@@ -84,3 +84,5 @@ nav.co-branded-header .nav-cta{margin-left:0}
 .dob-preview{font-size:14px;color:var(--muted)}.dob-events{border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:8px 0 14px}.dob-events label{display:flex;gap:10px;align-items:center;padding:6px 0;font-weight:600}
 .all-heats-reset{display:flex;gap:10px;align-items:center;font-weight:600;margin:6px 0 12px}.all-heats-reset input{width:18px;height:18px;min-height:0;margin:0}
 .notice.registration-deadline.registration-late-entry{background:#fff4e5;border-color:#f3c98b;color:#7a4a00}
+.add-participant-row{margin:0 0 14px}.add-participant-form .grid{gap:14px}
+.stat-card{display:block;text-align:left;width:100%;cursor:pointer;color:inherit;font:inherit;background:var(--card)}.stat-card:hover{background:var(--accent-soft)}.stat-link{color:var(--accent);font-weight:700;font-size:13px;margin-left:6px}.checkin-pill{background:#e6f6ee;color:var(--good);white-space:nowrap}

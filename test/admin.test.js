@@ -38,7 +38,7 @@ test('admin end-to-end API regression',async t=>{
   assert.equal((await api('/api/admin/heat-builder?eventKey='+encodeURIComponent(key),null,false)).status,401);assert.equal((await api('/api/admin/save-heats',{eventKey:key,entries:[]},false)).status,401);
   assert.equal((await api('/api/admin/registrations/'+id+'/details',{fullName:'X',schoolName:'Y'},false)).status,401);
   assert.equal((await api('/api/admin/registrations/'+id+'/dob',{dob:'2019-05-19'},false)).status,401);
-  assert.equal((await api('/api/admin/seed-all-heats',{lanes:6},false)).status,401);assert.equal((await api('/api/admin/heat-list.docx',null,false)).status,401);
+  assert.equal((await api('/api/admin/seed-all-heats',{lanes:6},false)).status,401);assert.equal((await fetch(base+'/api/admin/registrations',{method:'POST',body:new FormData()})).status,401);assert.equal((await api('/api/admin/heat-list.docx',null,false)).status,401);
   assert.equal((await api('/api/admin/heat-sheet?format=pdf&eventKey='+encodeURIComponent(key),null,false)).status,401);
   for(const kind of ['photo','proof'])assert.equal((await fetch(base+`/api/media/${id}/${kind}`)).status,401);
   assert.equal((await api('/api/admin/login',{pin:'wrong'},false)).status,403);
@@ -230,5 +230,58 @@ test('admin end-to-end API regression',async t=>{
   assert.equal((xml.match(/<w:sectPr/g)||[]).length,expected.size+1,'summary page + one section per event');
   assert.equal((await api('/api/admin/seed-all-heats',{lanes:11})).status,400);
   assert.equal((await query("SELECT COUNT(*)::int n FROM admin_audit WHERE action='SEED_ALL_HEATS'")).rows[0].n,2);
+ });
+ await t.test('participation certificate: from competition day, with the ticket link, also via Find My Ticket',async()=>{
+  const previous=process.env.CERTIFICATES_FROM,kid=await register({fullName:'Certificate Swimmer',phone:'9876500011',dob:'2015-05-01'});
+  const cert=()=>fetch(base+'/api/certificate/'+encodeURIComponent(kid.ticketToken));
+  try{
+   process.env.CERTIFICATES_FROM=new Date(Date.now()+86400000).toISOString();
+   const early=await cert();assert.equal(early.status,403);assert.equal((await early.json()).code,'CERTIFICATE_NOT_YET_AVAILABLE');
+   const ticketEarly=await (await fetch(base+'/api/ticket/'+kid.ticketToken)).json();assert.equal(ticketEarly.certificateAvailable,false);assert.equal(ticketEarly.certificateUrl,'/api/certificate/'+kid.ticketToken);
+   process.env.CERTIFICATES_FROM=new Date(Date.now()-1000).toISOString();
+   const pdf=await cert();assert.equal(pdf.status,200);assert.equal(pdf.headers.get('content-type'),'application/pdf');
+   assert.match(pdf.headers.get('content-disposition'),/filename="BSF-Participation-Certificate-Certificate-Swimmer\.pdf"/);
+   const bytes=Buffer.from(await pdf.arrayBuffer());assert.equal(bytes.subarray(0,5).toString(),'%PDF-');assert.equal((bytes.toString('latin1').match(/\/Type \/Page\b/g)||[]).length,1);
+   assert.equal((await (await fetch(base+'/api/ticket/'+kid.ticketToken)).json()).certificateAvailable,true);
+   const found=await (await fetch(base+'/api/ticket-recovery',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:'9876500011',dob:'2015-05-01'})})).json();
+   const match=found.matches.find(m=>m.registrationId===kid.registrationId);assert.equal(match.certificateAvailable,true);assert.equal(match.certificateUrl,'/api/certificate/'+kid.ticketToken);
+   assert.equal((await fetch(base+'/api/certificate/not-a-real-token')).status,404);
+  }finally{if(previous===undefined)delete process.env.CERTIFICATES_FROM;else process.env.CERTIFICATES_FROM=previous}
+ });
+ await t.test('admin manual entry: minimal details, category/fee, auto heat placement, duplicate check',async()=>{
+  const add=async(fields,files={})=>{const fd=new FormData();for(const [k,v] of Object.entries(fields))fd.set(k,v);for(const [k,blob] of Object.entries(files))fd.set(k,blob,k+'.png');const r=await fetch(base+'/api/admin/registrations',{method:'POST',body:fd,headers:{cookie}});return {status:r.status,body:await r.json()}};
+  const key=eventKey('Under-12','Boys','25m Freestyle');
+  await api('/api/admin/seed-all-heats',{lanes:6,replaceExisting:true});
+  const before=(await query('SELECT heat_no,lane_no FROM race_entries WHERE event_key=$1',[key])).rows,lanes=Math.max(...before.map(r=>r.lane_no)),last=Math.max(...before.map(r=>r.heat_no));
+  const used=new Set(before.filter(r=>r.heat_no===last).map(r=>r.lane_no)),free=Array.from({length:lanes},(_,i)=>i+1).find(l=>!used.has(l));
+  const expected=free?{heatNo:last,laneNo:free}:{heatNo:last+1,laneNo:1};
+  const kalp={fullName:'Kalp Shah',schoolName:'Manual Entry School',gender:'Boys',dob:'2015-02-10',events:JSON.stringify(['25m Freestyle','25m Butterfly']),paymentStatus:'Verified',paymentNote:'Cash paid at desk'};
+  const added=await add(kalp);
+  assert.equal(added.status,200,JSON.stringify(added.body));assert.equal(added.body.category,'Under-12');assert.equal(added.body.amount,600);assert.equal(added.body.paymentStatus,'Verified');
+  assert.deepEqual(added.body.placements.find(p=>p.event==='25m Freestyle'),{event:'25m Freestyle',...expected});
+  const row=(await query('SELECT phone,email,participant_photo,payment_proof,payment_utr,payment_status,age_category FROM registrations WHERE registration_id=$1',[added.body.registrationId])).rows[0];
+  assert.deepEqual(row,{phone:'',email:null,participant_photo:null,payment_proof:null,payment_utr:'Cash paid at desk',payment_status:'Verified',age_category:'Under-12'});
+  assert.deepEqual((await query('SELECT heat_no,lane_no FROM race_entries WHERE event_key=$1 AND registration_id=$2',[key,added.body.registrationId])).rows[0],{heat_no:expected.heatNo,lane_no:expected.laneNo});
+  assert.equal((await (await fetch(base+'/api/ticket/'+added.body.ticketToken)).json()).fullName,'Kalp Shah','ticket works');
+  const detail=await api('/api/admin/registrations/'+added.body.registrationId);assert.equal(detail.status,200);assert.equal(detail.body.participant_photo,null);
+  const dup=await add(kalp);assert.equal(dup.status,409);assert.equal(dup.body.code,'POSSIBLE_DUPLICATE');assert.equal(dup.body.registrationId,added.body.registrationId);
+  const second=await add({...kalp,allowDuplicate:'true'});assert.equal(second.status,200);assert.notEqual(second.body.registrationId,added.body.registrationId);
+  const withPhoto=await add({fullName:'Photo Entry',schoolName:'S',gender:'Girls',dob:'2013-01-01',events:JSON.stringify(['50m Freestyle']),phone:'9988776600'},{participantPhoto:new Blob(['img'],{type:'image/png'})});
+  assert.equal(withPhoto.status,200);assert.equal(withPhoto.body.category,'Under-14');assert.equal(withPhoto.body.placements[0].notPlaced,true,'no heats yet for that event');
+  for(const bad of [{...kalp,fullName:''},{...kalp,gender:'Other'},{...kalp,dob:'2099-01-01'},{...kalp,dob:'2000-01-01'},{...kalp,events:JSON.stringify(['200m Individual Medley (IM)'])},{...kalp,events:'[]'},{...kalp,phone:'123'},{...kalp,email:'nope'}])
+   assert.equal((await add({...bad,allowDuplicate:'true'})).status,400,JSON.stringify(bad));
+  assert.equal((await query("SELECT COUNT(*)::int n FROM admin_audit WHERE action='MANUAL_ENTRY'")).rows[0].n,3);
+ });
+ await t.test('filter registrations by check-in status (list and CSV)',async()=>{
+  const all=(await query('SELECT registration_id,checkin_status FROM registrations')).rows,approved=all.filter(r=>r.checkin_status==='Approved').map(r=>r.registration_id).sort();
+  assert.ok(approved.length>=1,'at least one swimmer checked in by earlier subtests');
+  const list=await api('/api/admin/registrations?'+new URLSearchParams({checkinStatus:'Approved',limit:'100'}));
+  assert.equal(list.status,200);assert.equal(list.body.total,approved.length);assert.deepEqual(list.body.rows.map(r=>r.registration_id).sort(),approved);
+  assert.ok(list.body.rows.every(r=>r.checkin_status==='Approved'));
+  const notIn=await api('/api/admin/registrations?'+new URLSearchParams({checkinStatus:'Not Checked In',limit:'100'}));
+  assert.equal(notIn.body.total,all.filter(r=>r.checkin_status==='Not Checked In').length);
+  const csv=await fetch(base+'/api/admin/registrations.csv?checkinStatus=Approved',{headers:{cookie}});
+  assert.match(csv.headers.get('content-disposition'),/bsf-registrations-Checked-in-/);
+  assert.equal((await csv.text()).trim().split('\r\n').length-1,approved.length,'CSV has only checked-in swimmers');
  });
 });
