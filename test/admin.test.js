@@ -315,7 +315,12 @@ test('admin end-to-end API regression',async t=>{
   const slots=(await query('SELECT registration_id,heat_no FROM race_entries WHERE event_key=$1',[key])).rows,heatOf=id=>slots.find(r=>r.registration_id===id).heat_no;
   const event=async()=>(await (await fetch(base+'/api/public/results')).json()).find(e=>e.event_key===key);
   process.env.TOURNAMENT='closed';
-  try{assert.deepEqual(await (await fetch(base+'/api/public/timings')).json(),{closed:true},'tournament closed: no public timings');assert.equal((await (await fetch(base+'/api/config')).json()).tournamentClosed,true)}finally{process.env.TOURNAMENT='open'}
+  try{
+   const cfg=await (await fetch(base+'/api/config',{headers:{cookie}})).json();
+   assert.equal(cfg.registrationOpen,false,'closed even though REGISTRATION_CLOSES_AT is in the future');assert.equal(cfg.lateEntry,false,'no admin late entry after the competition');
+   const late=await fetch(base+'/api/register',{method:'POST',headers:{cookie},body:(()=>{const f=new FormData();for(const [k,v] of Object.entries({fullName:'After Close',schoolName:'S',gender:'Boys',dob:'2015-05-01',email:'parent@example.com',phone:'9988776600',events:JSON.stringify(['25m Freestyle']),idempotencyKey:crypto.randomUUID()}))f.set(k,v);f.set('participantPhoto',new Blob(['photo bytes'],{type:'image/png'}),'photo.png');f.set('paymentProof',new Blob(['proof bytes'],{type:'image/jpeg'}),'proof.jpg');return f})()});
+   assert.equal(late.status,403,'admin cannot register through the public form after the competition: '+JSON.stringify(await late.clone().json()));
+   assert.deepEqual(await (await fetch(base+'/api/public/timings')).json(),{closed:true},'tournament closed: no public timings');assert.equal((await (await fetch(base+'/api/config')).json()).tournamentClosed,true)}finally{process.env.TOURNAMENT='open'}
   assert.equal((await (await fetch(base+'/api/config')).json()).tournamentClosed,false);assert.ok(Array.isArray(await (await fetch(base+'/api/public/timings')).json()));
   process.env.PUBLIC_RESULTS='closed';
   try{assert.deepEqual(await (await fetch(base+'/api/public/results')).json(),{closed:true},'results closed: nothing public')}finally{process.env.PUBLIC_RESULTS='open'}
