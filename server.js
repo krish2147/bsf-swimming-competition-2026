@@ -227,10 +227,24 @@ app.post('/api/ticket-recovery',async(req,res)=>{
   }
 });
 
+// Live results: per event, an overall ranking across all heats from saved times (provisional), and the official podium
+// once the event is published from the Results desk.
+const timingSeconds=t=>{const m=/^(?:(\d+):)?(\d+(?:\.\d+)?)$/.exec(String(t||'').trim());return m?Number(m[1]||0)*60+Number(m[2]):null};
 app.get('/api/public/results',async(req,res)=>{
-  const rows=await q(`SELECT re.event_key,re.position,r.full_name,r.school_name,r.registration_id,(SELECT timing_text FROM timing_entries te WHERE te.event_key=re.event_key AND te.registration_id=re.registration_id LIMIT 1) timing_text FROM result_entries re JOIN registrations r ON r.registration_id=re.registration_id JOIN event_publication ep ON ep.event_key=re.event_key AND ep.published=TRUE ORDER BY ep.published_at DESC,re.event_key,re.position`);
-  const g={};for(const x of rows){g[x.event_key]??={meta:parseEventKey(x.event_key),entries:[]};g[x.event_key].entries.push(x)}
-  res.json(Object.values(g));
+  res.set('Cache-Control','no-store');
+  const timings=await q(`SELECT te.event_key,te.heat_no,te.timing_text,te.status,r.registration_id,r.full_name,r.school_name FROM timing_entries te JOIN registrations r ON r.registration_id=te.registration_id WHERE te.status IN ('TIME','DNS','DQ')`);
+  const podium=await q(`SELECT re.event_key,re.position,r.registration_id,r.full_name,r.school_name FROM result_entries re JOIN registrations r ON r.registration_id=re.registration_id JOIN event_publication ep ON ep.event_key=re.event_key AND ep.published=TRUE ORDER BY re.event_key,re.position`);
+  const published=new Set((await q('SELECT event_key FROM event_publication WHERE published=TRUE')).map(r=>r.event_key));
+  const order=new Map();let n=0;for(const c of CATEGORIES)for(const gender of ['Boys','Girls'])for(const event of c.events)order.set(eventKey(c.name,gender,event),n++);
+  const events=new Map(),eventFor=key=>{if(!events.has(key)){const meta=parseEventKey(key);events.set(key,{event_key:key,meta:{...meta,label:CATEGORIES.find(c=>c.name===meta.category)?.eventLabels?.[meta.event]||meta.event},order:order.get(key)??9999,published:published.has(key),official:[],standings:[],notFinished:[]})}return events.get(key)};
+  const timeOf=new Map(timings.map(t=>[`${t.event_key}|${t.registration_id}`,t.timing_text]));
+  for(const t of timings){
+    const e=eventFor(t.event_key),secs=t.status==='TIME'?timingSeconds(t.timing_text):null,swimmer={full_name:t.full_name,school_name:t.school_name,heat_no:t.heat_no};
+    if(secs!=null)e.standings.push({...swimmer,timing_text:t.timing_text,seconds:secs});else if(t.status!=='TIME')e.notFinished.push({...swimmer,status:t.status});
+  }
+  for(const e of events.values()){e.standings.sort((a,b)=>a.seconds-b.seconds);e.standings.forEach((s,i)=>{s.rank=i&&s.seconds===e.standings[i-1].seconds?e.standings[i-1].rank:i+1});for(const s of e.standings)delete s.seconds}
+  for(const p of podium)eventFor(p.event_key).official.push({position:p.position,full_name:p.full_name,school_name:p.school_name,timing_text:timeOf.get(`${p.event_key}|${p.registration_id}`)||null});
+  res.json([...events.values()].filter(e=>e.standings.length||e.official.length||e.notFinished.length).sort((a,b)=>a.order-b.order));
 });
 
 // Live timings: every saved time is public straight away; events not yet published from the Results desk are marked provisional.
