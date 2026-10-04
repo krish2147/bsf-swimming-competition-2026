@@ -14,6 +14,7 @@ const {heatSheetPdf,heatSheetDocx,buildHeatSheet,heatListDocx}=require('./src/he
 const {certificatePdf}=require('./src/certificate');
 const {requiresFloaters}=require('./public/floater-policy');
 const {assignHeats,heatSizes}=require('./public/heat-layout');
+const timingSeconds=require('./public/timing-parse');
 
 const app=express();
 const PORT=process.env.PORT||3000;
@@ -229,7 +230,6 @@ app.post('/api/ticket-recovery',async(req,res)=>{
 
 // Live results: per event, an overall ranking across all heats from saved times (provisional), and the official podium
 // once the event is published from the Results desk.
-const timingSeconds=t=>{const m=/^(?:(\d+):)?(\d+(?:\.\d+)?)$/.exec(String(t||'').trim());return m?Number(m[1]||0)*60+Number(m[2]):null};
 app.get('/api/public/results',async(req,res)=>{
   res.set('Cache-Control','no-store');
   // Built from the heat list: every swimmer placed in a heat is listed (with heat and lane), plus any timed swimmer not in it.
@@ -290,6 +290,7 @@ app.get('/api/admin/timings',requireAdmin,async(req,res)=>res.json(await q(`SELE
 
 app.post('/api/admin/timing',requireAdmin,async(req,res)=>{
   const b=req.body;
+  if((b.status||'TIME')==='TIME'&&String(b.timingText||'').trim()&&timingSeconds(b.timingText)==null)return res.status(400).json({error:`"${String(b.timingText).slice(0,20)}" is not a time — type it like 00:36.42 or 36.42`});
   await pool.query(`INSERT INTO timing_entries(event_key,heat_no,registration_id,timing_text,status,updated_by) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(event_key,heat_no,registration_id) DO UPDATE SET timing_text=EXCLUDED.timing_text,status=EXCLUDED.status,updated_by=EXCLUDED.updated_by,updated_at=NOW()`,[b.eventKey,Number(b.heatNo||1),b.registrationId,b.timingText||null,b.status||'TIME',req.session.operator||'Admin']);
   await audit('SAVE_TIMING','event',b.eventKey,{heatNo:Number(b.heatNo||1),registrationId:b.registrationId,timingText:b.timingText,status:b.status},req.session.operator);
   res.json({ok:true});

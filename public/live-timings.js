@@ -2,7 +2,7 @@
 (()=>{
   const out=document.getElementById('out'),status=document.getElementById('liveStatus'),search=document.getElementById('timingSearch');
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const seconds=t=>{const m=/^(?:(\d+):)?(\d+(?:\.\d+)?)$/.exec(String(t||'').trim());return m?Number(m[1]||0)*60+Number(m[2]):Infinity};
+  const seconds=t=>BSFTimingSeconds(t)??Infinity;
   const rank=r=>r.status==='TIME'?seconds(r.timing_text):r.status==='DNS'?1e9:2e9;
   let data=[];
   function render(){
