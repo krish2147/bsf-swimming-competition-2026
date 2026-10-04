@@ -232,19 +232,22 @@ app.post('/api/ticket-recovery',async(req,res)=>{
 const timingSeconds=t=>{const m=/^(?:(\d+):)?(\d+(?:\.\d+)?)$/.exec(String(t||'').trim());return m?Number(m[1]||0)*60+Number(m[2]):null};
 app.get('/api/public/results',async(req,res)=>{
   res.set('Cache-Control','no-store');
-  const timings=await q(`SELECT te.event_key,te.heat_no,te.timing_text,te.status,r.registration_id,r.full_name,r.school_name FROM timing_entries te JOIN registrations r ON r.registration_id=te.registration_id WHERE te.status IN ('TIME','DNS','DQ')`);
+  // Built from the heat list: every swimmer placed in a heat is listed (with heat and lane), plus any timed swimmer not in it.
+  const timings=await q(`SELECT COALESCE(he.event_key,te.event_key) event_key,COALESCE(he.heat_no,te.heat_no) heat_no,he.lane_no,te.timing_text,te.status,r.registration_id,r.full_name,r.school_name
+    FROM race_entries he FULL JOIN (SELECT * FROM timing_entries WHERE status IN ('TIME','DNS','DQ')) te ON te.event_key=he.event_key AND te.registration_id=he.registration_id
+    JOIN registrations r ON r.registration_id=COALESCE(he.registration_id,te.registration_id) ORDER BY 2,3`);
   const podium=await q(`SELECT re.event_key,re.position,r.registration_id,r.full_name,r.school_name FROM result_entries re JOIN registrations r ON r.registration_id=re.registration_id JOIN event_publication ep ON ep.event_key=re.event_key AND ep.published=TRUE ORDER BY re.event_key,re.position`);
   const published=new Set((await q('SELECT event_key FROM event_publication WHERE published=TRUE')).map(r=>r.event_key));
   const order=new Map();let n=0;for(const c of CATEGORIES)for(const gender of ['Boys','Girls'])for(const event of c.events)order.set(eventKey(c.name,gender,event),n++);
-  const events=new Map(),eventFor=key=>{if(!events.has(key)){const meta=parseEventKey(key);events.set(key,{event_key:key,meta:{...meta,label:CATEGORIES.find(c=>c.name===meta.category)?.eventLabels?.[meta.event]||meta.event},order:order.get(key)??9999,published:published.has(key),official:[],standings:[],notFinished:[]})}return events.get(key)};
+  const events=new Map(),eventFor=key=>{if(!events.has(key)){const meta=parseEventKey(key);events.set(key,{event_key:key,meta:{...meta,label:CATEGORIES.find(c=>c.name===meta.category)?.eventLabels?.[meta.event]||meta.event},order:order.get(key)??9999,published:published.has(key),official:[],standings:[],notFinished:[],awaiting:[]})}return events.get(key)};
   const timeOf=new Map(timings.map(t=>[`${t.event_key}|${t.registration_id}`,t.timing_text]));
   for(const t of timings){
-    const e=eventFor(t.event_key),secs=t.status==='TIME'?timingSeconds(t.timing_text):null,swimmer={full_name:t.full_name,school_name:t.school_name,heat_no:t.heat_no};
-    if(secs!=null)e.standings.push({...swimmer,timing_text:t.timing_text,seconds:secs});else if(t.status!=='TIME')e.notFinished.push({...swimmer,status:t.status});
+    const e=eventFor(t.event_key),secs=t.status==='TIME'?timingSeconds(t.timing_text):null,swimmer={full_name:t.full_name,school_name:t.school_name,heat_no:t.heat_no,lane_no:t.lane_no};
+    if(secs!=null)e.standings.push({...swimmer,timing_text:t.timing_text,seconds:secs});else if(t.status==='DNS'||t.status==='DQ')e.notFinished.push({...swimmer,status:t.status});else e.awaiting.push(swimmer);
   }
   for(const e of events.values()){e.standings.sort((a,b)=>a.seconds-b.seconds);e.standings.forEach((s,i)=>{s.rank=i&&s.seconds===e.standings[i-1].seconds?e.standings[i-1].rank:i+1});for(const s of e.standings)delete s.seconds}
   for(const p of podium)eventFor(p.event_key).official.push({position:p.position,full_name:p.full_name,school_name:p.school_name,timing_text:timeOf.get(`${p.event_key}|${p.registration_id}`)||null});
-  res.json([...events.values()].filter(e=>e.standings.length||e.official.length||e.notFinished.length).sort((a,b)=>a.order-b.order));
+  res.json([...events.values()].filter(e=>e.standings.length||e.official.length||e.notFinished.length||e.awaiting.length).sort((a,b)=>a.order-b.order));
 });
 
 // Live timings: every saved time is public straight away; events not yet published from the Results desk are marked provisional.
