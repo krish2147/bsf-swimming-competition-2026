@@ -302,10 +302,12 @@ test('admin end-to-end API regression',async t=>{
   const kids=[];for(const n of ['P','Q','R','S'])kids.push(await register({dob:'2013-01-01',fullName:'Results Swimmer '+n,events:JSON.stringify(['50m Freestyle'])}));
   assert.equal((await api('/api/admin/seed-heats',{eventKey:key,lanes:2})).status,200);
   const slots=(await query('SELECT registration_id,heat_no FROM race_entries WHERE event_key=$1',[key])).rows,heatOf=id=>slots.find(r=>r.registration_id===id).heat_no;
-  const times=[['00:35.10','TIME'],['00:33.00','TIME'],['00:33.00','TIME'],['','DQ']];
-  for(const [i,[timingText,status]] of times.entries())assert.equal((await api('/api/admin/timing',{eventKey:key,heatNo:heatOf(kids[i].registrationId),registrationId:kids[i].registrationId,timingText,status})).status,200);
   const event=async()=>(await (await fetch(base+'/api/public/results')).json()).find(e=>e.event_key===key);
   let e=await event();
+  assert.deepEqual(e.awaiting.map(s=>s.full_name).sort(),kids.map((_,i)=>'Results Swimmer '+'PQRS'[i]),'whole heat list shown before any time');assert.ok(e.awaiting.every(s=>s.heat_no>=1&&s.lane_no>=1));assert.deepEqual(e.standings,[]);
+  const times=[['00:35.10','TIME'],['00:33.00','TIME'],['00:33.00','TIME'],['','DQ']];
+  for(const [i,[timingText,status]] of times.entries())assert.equal((await api('/api/admin/timing',{eventKey:key,heatNo:heatOf(kids[i].registrationId),registrationId:kids[i].registrationId,timingText,status})).status,200);
+  e=await event();assert.deepEqual(e.awaiting,[],'everyone timed');
   assert.equal(e.published,false);assert.deepEqual(e.official,[]);
   assert.deepEqual(e.standings.map(s=>[s.rank,s.timing_text]),[[1,'00:33.00'],[1,'00:33.00'],[3,'00:35.10']]);assert.deepEqual(e.standings.slice(0,2).map(s=>s.full_name).sort(),['Results Swimmer Q','Results Swimmer R']);
   assert.deepEqual(e.standings.map(s=>s.rank),[1,1,3],'tie shares first place');assert.equal(e.standings[2].full_name,'Results Swimmer P');
