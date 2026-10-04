@@ -256,6 +256,10 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    await dialog.getByRole('button',{name:'Close add participant'}).tap();await page.waitForFunction(()=>document.getElementById('registrationRows').textContent.includes('Aum Tilavat'));
    assert.equal((await query("SELECT age_category FROM registrations WHERE full_name='Aum Tilavat'")).rows[0].age_category,'Under-12');
    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   await page.locator('#showSchools').tap();const schools=page.getByRole('dialog',{name:'Schools'});await schools.waitFor();
+   await page.waitForFunction(()=>document.getElementById('schoolRows').textContent.includes('Manual Test School'));assert.match(await page.locator('#schoolsSummary').textContent(),/^\d+ school\(s\) · \d+ swimmer\(s\)$/);
+   assert.equal(await page.locator('#schoolCount').textContent(),String(await page.locator('#schoolRows tr').count()));
+   await page.screenshot({path:path.join(artifacts,'admin-schools.png')});await schools.getByRole('button',{name:'Close schools'}).tap();
    assert.deepEqual(errors,[],'manual entry console errors');await context.close();
    console.log('PASS admin manual entry: dashboard form, DOB → category events, saved and listed');
   }
@@ -274,6 +278,16 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
     assert.ok(!(await pg.locator('.result-pickers').isVisible()),'pickers hidden');assert.equal(await pg.locator('.live-event').count(),0);assert.deepEqual(errors,[]);
     await pg.screenshot({path:path.join(artifacts,'results-closed.png'),fullPage:true});}finally{process.env.PUBLIC_RESULTS='open';await ctx.close()}
    console.log('PASS public results closed: notice shown, pickers and standings hidden');}
+  {const ctx=await browser.newContext({viewport:{width:390,height:844}}),pg=await ctx.newPage(),errors=[];pg.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+   const prevClose=process.env.REGISTRATION_CLOSES_AT;process.env.TOURNAMENT='closed';process.env.REGISTRATION_CLOSES_AT=new Date(Date.now()-1000).toISOString();
+   try{await pg.goto(base+'/');const dialog=pg.locator('dialog.registration-closed-dialog');await dialog.waitFor();assert.match(await dialog.textContent(),/Competition Concluded/);
+    assert.equal(await dialog.locator('a').getAttribute('href'),'/find-ticket.html');await pg.screenshot({path:path.join(artifacts,'tournament-closed-home.png')});
+    await dialog.getByRole('button',{name:'Close'}).click();await pg.waitForFunction(()=>document.querySelector('.registration-deadline').textContent.includes('competition has concluded'));
+    await pg.goto(base+'/timings.html');await pg.waitForFunction(()=>document.getElementById('out').textContent.includes('live timings are closed'));
+    assert.ok(!(await pg.locator('#timingSearch').isVisible()));assert.equal(await pg.locator('.live-event').count(),0);
+    await pg.screenshot({path:path.join(artifacts,'tournament-closed-timings.png'),fullPage:true});assert.deepEqual(errors,[]);
+   }finally{process.env.TOURNAMENT='open';process.env.REGISTRATION_CLOSES_AT=prevClose;await ctx.close()}
+   console.log('PASS tournament closed: thank-you popup + notice on home, live timings closed');}
   const anon=await browser.newContext();const anonymousPage=await anon.newPage();for(const route of ['payments','timings','results','checkin']){await anonymousPage.goto(base+`/admin/${route}.html`);await anonymousPage.waitForURL(base+'/admin/');await anonymousPage.locator('#loginBox:not(.hidden)').waitFor()}await anon.close();console.log('PASS unauthenticated admin desks redirect to login');
   console.log('Screenshots: '+artifacts);
  }finally{if(browser)await browser.close();await close()}

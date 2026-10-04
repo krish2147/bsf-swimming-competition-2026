@@ -16,7 +16,10 @@
   async function load(){
     try{
       const response=await fetch('/api/public/timings',{cache:'no-store'});if(!response.ok)throw Error();
-      data=await response.json();render();
+      const json=await response.json();
+      for(const el of document.querySelectorAll('#timingSearchBox,.live-badge,#timingsIntro'))el.classList.toggle('hidden',!!(json&&json.closed));
+      if(json&&json.closed){out.className='notice';out.textContent='The competition has concluded and live timings are closed. Thank you for joining us!';status.textContent='';return}
+      data=json;render();
       status.textContent='Updated '+new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' · refreshes automatically';
     }catch{status.textContent='Could not refresh — retrying…'}
   }

@@ -297,12 +297,26 @@ test('admin end-to-end API regression',async t=>{
   assert.equal((await api('/api/admin/publish-event',{eventKey:key})).status,200);
   rows=await live();assert.ok(rows.length&&rows.every(r=>r.published===true),'official after publish');
  });
+ await t.test('schools: count and names, spelling variants merged, CSV download',async()=>{
+  for(const schoolName of ["St. Xavier's School",'st xaviers','ST. XAVIER\'S  SCHOOL','Navrachana Vidyani'])await register({schoolName,fullName:'School Count '+schoolName});
+  const r=await api('/api/admin/schools');assert.equal(r.status,200);
+  const xav=r.body.schools.find(s=>s.name==="St. Xavier's School");assert.ok(xav,'on a tie, the normally capitalised spelling is shown');
+  assert.equal(xav.participants,3);assert.equal(xav.otherSpellings.length,2);
+  assert.ok(r.body.schools.some(s=>s.name==='Navrachana Vidyani'&&s.participants===1));
+  assert.equal(r.body.count,r.body.schools.length);assert.equal(r.body.participants,r.body.schools.reduce((n,s)=>n+s.participants,0));
+  assert.equal((await api('/api/admin/schools',null,false)).status,401);
+  const csv=await fetch(base+'/api/admin/schools.csv',{headers:{cookie}});assert.equal(csv.status,200);const body=await csv.text();
+  assert.match(body,/Sr No,School,Participants,Checked in,Other spellings/);assert.ok(body.includes("St. Xavier's School,3,0,"));
+ });
  await t.test('live public results: standings across heats with ties, official podium after publishing',async()=>{
   const key=eventKey('Under-14','Boys','50m Freestyle');
   const kids=[];for(const n of ['P','Q','R','S'])kids.push(await register({dob:'2013-01-01',fullName:'Results Swimmer '+n,events:JSON.stringify(['50m Freestyle'])}));
   assert.equal((await api('/api/admin/seed-heats',{eventKey:key,lanes:2})).status,200);
   const slots=(await query('SELECT registration_id,heat_no FROM race_entries WHERE event_key=$1',[key])).rows,heatOf=id=>slots.find(r=>r.registration_id===id).heat_no;
   const event=async()=>(await (await fetch(base+'/api/public/results')).json()).find(e=>e.event_key===key);
+  process.env.TOURNAMENT='closed';
+  try{assert.deepEqual(await (await fetch(base+'/api/public/timings')).json(),{closed:true},'tournament closed: no public timings');assert.equal((await (await fetch(base+'/api/config')).json()).tournamentClosed,true)}finally{process.env.TOURNAMENT='open'}
+  assert.equal((await (await fetch(base+'/api/config')).json()).tournamentClosed,false);assert.ok(Array.isArray(await (await fetch(base+'/api/public/timings')).json()));
   process.env.PUBLIC_RESULTS='closed';
   try{assert.deepEqual(await (await fetch(base+'/api/public/results')).json(),{closed:true},'results closed: nothing public')}finally{process.env.PUBLIC_RESULTS='open'}
   let e=await event();
