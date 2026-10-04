@@ -80,6 +80,12 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
     assert.match(download.suggestedFilename(),/^bsf-full-heat-list-\d{4}-\d{2}-\d{2}\.docx$/);assert.equal((await fs.readFile(await download.path())).subarray(0,2).toString(),'PK');}
    page.once('dialog',d=>d.accept());await page.getByRole('button',{name:'Create / Reset Heats'}).click();await page.locator('[data-timing-row]').first().waitFor();
    const timing=page.locator(`[data-timing-row="${id}"]`);await timing.locator('.timing-value').fill('00:36.42');await timing.getByRole('button',{name:'Save',exact:true}).click();await page.waitForFunction(id=>document.querySelector(`[data-timing-row="${id}"] .timing-state`)?.textContent==='Saved ✓',id);
+   await page.goto(base+'/timings.html');await page.waitForFunction(p=>document.getElementById('out').textContent.includes(p),participant);
+   {const card=page.locator('.live-event').filter({hasText:'25m Freestyle'}).filter({hasText:'Under-12 • Boys'});assert.ok((await card.textContent()).includes('00:36.42'));
+    assert.match(await card.locator('.pill').textContent(),/Live · provisional|Official/);assert.match(await page.locator('#liveStatus').textContent(),/Updated .* refreshes automatically/);
+    await page.locator('#timingSearch').fill('no such swimmer zzz');await page.waitForFunction(()=>document.getElementById('out').textContent.includes('No timings match'));
+    await page.locator('#timingSearch').fill(participant);await page.waitForFunction(p=>document.getElementById('out').textContent.includes(p),participant);
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:path.join(artifacts,`${name}-live-timings.png`),fullPage:true});}
    await page.goto(base+'/admin/results.html');await page.waitForFunction(()=>document.getElementById('event').options.length>1);await page.locator('#event').selectOption(key);await page.locator('#p1').selectOption(id);await page.locator('[data-position="1"]').click();await page.waitForFunction(()=>document.getElementById('msg').textContent==='Saved privately.');
    await page.goto(base+'/admin/checkin.html?token='+token);await page.locator('#approve').waitFor();await page.locator('#approve').click();await page.waitForFunction(()=>document.getElementById('checkinStatus').textContent==='Approved');
    await page.goto(base+'/admin/');await page.getByRole('button',{name:id,exact:true}).waitFor();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
