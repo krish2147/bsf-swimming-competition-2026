@@ -15,7 +15,7 @@ window.loadHeat=run(async()=>{
 document.getElementById('list').addEventListener('click',run(async e=>{
  const button=e.target.closest('[data-save-timing]');if(!button)return;const row=button.closest('[data-timing-row]'),state=row.querySelector('.timing-state');
  button.disabled=true;state.textContent='Saving…';
- try{await post('/api/admin/timing',{eventKey:eventSelect.value,heatNo:Number(heat.value),registrationId:row.dataset.timingRow,timingText:row.querySelector('.timing-value').value,status:row.querySelector('.timing-status').value});state.textContent='Saved ✓'}catch(err){state.textContent='Save failed';throw err}finally{button.disabled=false}
+ try{await post('/api/admin/timing',{eventKey:eventSelect.value,heatNo:Number(heat.value),registrationId:row.dataset.timingRow,timingText:row.querySelector('.timing-value').value,status:row.querySelector('.timing-status').value});state.textContent='Saved ✓'}catch(err){state.textContent=err.message||'Save failed';throw err}finally{button.disabled=false}
 }));
 eventSelect.addEventListener('change',()=>{document.getElementById('list').replaceChildren();heatInfo.textContent='';heat.value=1});
 run(async()=>{if(!await Admin.authenticated())return;const events=await api('/api/admin/events');eventSelect.innerHTML='<option value="">Select event</option>'+events.map(e=>`<option value="${esc(e.key)}">${text(e.category)} • ${text(e.gender)} • ${text(e.event)} (${e.count})</option>`).join('')})();
