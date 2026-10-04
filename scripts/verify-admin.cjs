@@ -287,6 +287,11 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
     {const d=pg.locator('dialog.registration-closed-dialog');await d.waitFor();await Promise.all([pg.waitForURL(base+'/find-ticket.html'),d.getByRole('link').click()]);await pg.goBack();await pg.waitForFunction(()=>document.getElementById('out').textContent.includes('live timings are closed'));const again=pg.locator('dialog.registration-closed-dialog');await again.waitFor();await again.getByRole('button',{name:'Close'}).click();}
     assert.ok(!(await pg.locator('#timingSearch').isVisible()));assert.equal(await pg.locator('.live-event').count(),0);
     await pg.screenshot({path:path.join(artifacts,'tournament-closed-timings.png'),fullPage:true});assert.deepEqual(errors,[]);
+    // Logged in as admin, with REGISTRATION_CLOSES_AT pushed into the future: still closed, popup still shown.
+    process.env.REGISTRATION_CLOSES_AT='2100-01-02T00:00:00+05:30';
+    await pg.goto(base+'/admin/');await pg.locator('#pin').fill('test-pin');await pg.getByRole('button',{name:'Enter',exact:true}).click();await pg.locator('#dash:not(.hidden)').waitFor();
+    for(const route of ['/','/register.html']){await pg.goto(base+route);const d=pg.locator('dialog.registration-closed-dialog');await d.waitFor();assert.match(await d.textContent(),/Participation Certificates are Live!/,route);await d.getByRole('button',{name:'Close'}).click()}
+    assert.equal(await pg.locator('#form').isVisible(),false,'registration form hidden for admin after the competition');
    }finally{process.env.TOURNAMENT='open';process.env.REGISTRATION_CLOSES_AT=prevClose;await ctx.close()}
    console.log('PASS tournament closed: thank-you popup + notice on home, live timings closed');}
   const anon=await browser.newContext();const anonymousPage=await anon.newPage();for(const route of ['payments','timings','results','checkin']){await anonymousPage.goto(base+`/admin/${route}.html`);await anonymousPage.waitForURL(base+'/admin/');await anonymousPage.locator('#loginBox:not(.hidden)').waitFor()}await anon.close();console.log('PASS unauthenticated admin desks redirect to login');

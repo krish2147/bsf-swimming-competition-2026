@@ -84,16 +84,17 @@ function registrationClosesAt(){
   const configured=new Date(process.env.REGISTRATION_CLOSES_AT||DEFAULT_REGISTRATION_CLOSES_AT);
   return Number.isNaN(configured.getTime())?new Date(DEFAULT_REGISTRATION_CLOSES_AT):configured;
 }
-const registrationOpen=()=>Date.now()<registrationClosesAt().getTime();
+// The competition is over: the public site shows a thank-you, live timings are closed and registration is closed for
+// everyone (admins too), whatever REGISTRATION_CLOSES_AT says. Set TOURNAMENT=open to undo.
+const tournamentOpen=()=>String(process.env.TOURNAMENT||'').toLowerCase()==='open';
+const registrationOpen=()=>tournamentOpen()&&Date.now()<registrationClosesAt().getTime();
 const REGISTRATION_CLOSED_MESSAGE='Registration for the competition is now closed. If you already registered, use Find My Ticket to get your ticket.';
 
-// The competition is over: the public site shows a thank-you, live timings are closed. Set TOURNAMENT=open to undo.
-const tournamentOpen=()=>String(process.env.TOURNAMENT||'').toLowerCase()==='open';
 app.get('/api/config',(req,res)=>res.json({
   registrationOpen:registrationOpen(),
   tournamentClosed:!tournamentOpen(),
-  // A logged-in admin can still add late entries through the normal form after registration closes.
-  lateEntry:!registrationOpen()&&!!req.session?.admin,
+  // A logged-in admin can still add late entries through the normal form after registration closes (not after the competition).
+  lateEntry:tournamentOpen()&&!registrationOpen()&&!!req.session?.admin,
   registrationClosesAt:registrationClosesAt().toISOString(),
   categories:CATEGORIES,
   payeeName:process.env.PAYEE_NAME||'BARODA SWIM FRONT',
@@ -142,7 +143,7 @@ app.post('/api/register',upload.fields([{name:'participantPhoto',maxCount:1},{na
     if(old)return res.json({ok:true,registrationId:old.registration_id,ticketToken:old.ticket_token,duplicateSafe:true});
     // Checked after the duplicate lookup so a retry of a registration saved before closing still returns its ticket.
     const lateEntry=!registrationOpen();
-    if(lateEntry&&!req.session?.admin)return res.status(403).json({error:REGISTRATION_CLOSED_MESSAGE,code:'REGISTRATION_CLOSED'});
+    if(lateEntry&&(!req.session?.admin||!tournamentOpen()))return res.status(403).json({error:REGISTRATION_CLOSED_MESSAGE,code:'REGISTRATION_CLOSED'});
     const amount=individuals.length*300+(relay?800:0);
     const registrationId=`BSF26-${Date.now().toString().slice(-7)}-${Math.floor(100+Math.random()*900)}`;
     const ticketToken=uuidv4();
