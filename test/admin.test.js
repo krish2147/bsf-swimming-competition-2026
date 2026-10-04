@@ -272,4 +272,16 @@ test('admin end-to-end API regression',async t=>{
    assert.equal((await add({...bad,allowDuplicate:'true'})).status,400,JSON.stringify(bad));
   assert.equal((await query("SELECT COUNT(*)::int n FROM admin_audit WHERE action='MANUAL_ENTRY'")).rows[0].n,3);
  });
+ await t.test('filter registrations by check-in status (list and CSV)',async()=>{
+  const all=(await query('SELECT registration_id,checkin_status FROM registrations')).rows,approved=all.filter(r=>r.checkin_status==='Approved').map(r=>r.registration_id).sort();
+  assert.ok(approved.length>=1,'at least one swimmer checked in by earlier subtests');
+  const list=await api('/api/admin/registrations?'+new URLSearchParams({checkinStatus:'Approved',limit:'100'}));
+  assert.equal(list.status,200);assert.equal(list.body.total,approved.length);assert.deepEqual(list.body.rows.map(r=>r.registration_id).sort(),approved);
+  assert.ok(list.body.rows.every(r=>r.checkin_status==='Approved'));
+  const notIn=await api('/api/admin/registrations?'+new URLSearchParams({checkinStatus:'Not Checked In',limit:'100'}));
+  assert.equal(notIn.body.total,all.filter(r=>r.checkin_status==='Not Checked In').length);
+  const csv=await fetch(base+'/api/admin/registrations.csv?checkinStatus=Approved',{headers:{cookie}});
+  assert.match(csv.headers.get('content-disposition'),/bsf-registrations-Checked-in-/);
+  assert.equal((await csv.text()).trim().split('\r\n').length-1,approved.length,'CSV has only checked-in swimmers');
+ });
 });

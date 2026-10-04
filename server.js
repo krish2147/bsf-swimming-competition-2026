@@ -423,10 +423,10 @@ app.get('/api/admin/heat-sheet',requireAdmin,async(req,res)=>{
 });
 
 // Shared by the paged dashboard list and the CSV download so both always match the same filters.
-const registrationFilterKeys=['search','category','gender','event','paymentStatus'];
+const registrationFilterKeys=['search','category','gender','event','paymentStatus','checkinStatus'];
 async function filteredRegistrations(filters){
   const clauses=[],values=[];
-  for(const [key,column] of [['category','age_category'],['gender','gender'],['paymentStatus','payment_status']]){
+  for(const [key,column] of [['category','age_category'],['gender','gender'],['paymentStatus','payment_status'],['checkinStatus','checkin_status']]){
     if(filters[key]){values.push(filters[key]);clauses.push(`${column}=$${values.length}`)}
   }
   if(filters.search?.trim()){
@@ -460,7 +460,7 @@ app.get('/api/admin/registrations.csv',requireAdmin,async(req,res)=>{
   const rows=await filteredRegistrations(filters);
   const header=['Sr No','Registration ID','Participant','School','Gender','DOB','Age category','Events','Contact','Payment status','Check-in status'];
   const lines=[header,...rows.map((r,i)=>[i+1,r.registration_id,r.full_name,r.school_name,r.gender,r.dob,r.age_category,r.events_json.join('; '),r.phone,r.payment_status,r.checkin_status])].map(line=>line.map(csvCell).join(','));
-  const label=[filters.category,filters.gender,filters.event,filters.paymentStatus].filter(Boolean).join('-').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'')||'all';
+  const label=[filters.category,filters.gender,filters.event,filters.paymentStatus,filters.checkinStatus==='Approved'?'Checked-in':filters.checkinStatus].filter(Boolean).join('-').replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'')||'all';
   const stamp=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
   await audit('export','registrations',null,{filters:Object.fromEntries(registrationFilterKeys.filter(k=>filters[k]).map(k=>[k,filters[k]])),count:rows.length},req.session.operator);
   res.set('Content-Type','text/csv; charset=utf-8');

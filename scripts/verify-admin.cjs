@@ -83,6 +83,8 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    await page.goto(base+'/admin/results.html');await page.waitForFunction(()=>document.getElementById('event').options.length>1);await page.locator('#event').selectOption(key);await page.locator('#p1').selectOption(id);await page.locator('[data-position="1"]').click();await page.waitForFunction(()=>document.getElementById('msg').textContent==='Saved privately.');
    await page.goto(base+'/admin/checkin.html?token='+token);await page.locator('#approve').waitFor();await page.locator('#approve').click();await page.waitForFunction(()=>document.getElementById('checkinStatus').textContent==='Approved');
    await page.goto(base+'/admin/');await page.getByRole('button',{name:id,exact:true}).waitFor();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+   await page.getByRole('button',{name:'Show checked-in registrations'}).click();await page.waitForFunction(()=>document.getElementById('checkinFilter').value==='Approved');
+   await page.waitForFunction(id=>[...document.querySelectorAll('#registrationRows tr')].length>0&&[...document.querySelectorAll('#registrationRows tr')].every(tr=>tr.textContent.includes('✓ Checked in'))&&document.getElementById('registrationRows').textContent.includes(id),id);
    await page.screenshot({path:path.join(artifacts,`${name}-dashboard.png`)});
    assert.deepEqual(errors,[],name+' console errors');assert.deepEqual(badResponses,[],name+' failed requests');
    console.log(`PASS ${name}: real form submission → PostgreSQL → admin list/search/filters → details/photo/proof → payment persisted → ticket → timings/results/check-in; no console/API errors`);

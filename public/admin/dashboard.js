@@ -6,7 +6,7 @@ async function loadRegistrations(){
   const result=await api('/api/admin/registrations?'+params);
   if(version!==requestVersion)return;
   if(!result.rows.length&&page>1){page=1;return loadRegistrations()}
-  document.getElementById('registrationRows').innerHTML=result.rows.map(r=>`<tr><td><button class="secondary" type="button" data-participant="${esc(r.registration_id)}">${text(r.registration_id)}</button></td><td>${text(r.full_name)}</td><td>${text(r.school_name)}</td><td>${text(r.gender)}</td><td>${text(r.dob)}<br>${text(r.age_category)}</td><td>${r.events_json.map(esc).join('<br>')||'No events recorded'}</td><td>${text(r.phone)}</td><td>${text(r.payment_status)}</td><td>${esc(date(r.created_at))}</td></tr>`).join('')||'<tr><td colspan="9">No registrations match these filters.</td></tr>';
+  document.getElementById('registrationRows').innerHTML=result.rows.map(r=>`<tr><td><button class="secondary" type="button" data-participant="${esc(r.registration_id)}">${text(r.registration_id)}</button></td><td>${text(r.full_name)}</td><td>${text(r.school_name)}</td><td>${text(r.gender)}</td><td>${text(r.dob)}<br>${text(r.age_category)}</td><td>${r.events_json.map(esc).join('<br>')||'No events recorded'}</td><td>${text(r.phone)}</td><td>${text(r.payment_status)}</td><td>${r.checkin_status==='Approved'?'<span class="pill checkin-pill">✓ Checked in</span>':text(r.checkin_status)}</td><td>${esc(date(r.created_at))}</td></tr>`).join('')||'<tr><td colspan="10">No registrations match these filters.</td></tr>';
   document.getElementById('registrationCount').textContent=`${result.total} registration(s)`;
   document.getElementById('pageInfo').textContent=`Page ${page} of ${Math.max(1,Math.ceil(result.total/result.limit))}`;
   document.getElementById('previousPage').disabled=page<=1;
@@ -83,4 +83,9 @@ async function submitAdd(allowDuplicate){
   finally{button.disabled=false}
 }
 addForm.addEventListener('submit',e=>{e.preventDefault();submitAdd(false)});
+// "Checked in" tile: show only checked-in swimmers in the list below.
+document.getElementById('showCheckedIn').onclick=run(async()=>{
+  filters.reset();document.getElementById('checkinFilter').value='Approved';page=1;await loadRegistrations();
+  document.getElementById('registrationCount').scrollIntoView({behavior:'smooth',block:'start'});
+});
 
