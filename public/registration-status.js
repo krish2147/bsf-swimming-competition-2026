@@ -19,15 +19,16 @@
     if(!config.registrationOpen&&!config.lateEntry)showClosedPopup(config.tournamentClosed);
     return config;
   }).catch(()=>null);
-  // Popup shown each time the home or register page is opened after registration has closed.
+  // Popup shown each time a public page is opened after registration has closed; once the competition is over
+  // it announces that participation certificates are ready, with a button straight to Find My Ticket.
   function showClosedPopup(concluded){
     const dialog=document.createElement('dialog');
     dialog.className='registration-closed-dialog';dialog.setAttribute('aria-labelledby','registrationClosedTitle');
     dialog.innerHTML=concluded
-      ?'<p class="registration-closed-icon" aria-hidden="true">🏆</p><h2 id="registrationClosedTitle">Competition Concluded</h2>'
-      +'<p>The 3rd Inter-School Swimming Competition 2026 is complete. Thank you to every swimmer, parent, coach and school for making it a wonderful day!</p>'
-      +'<p class="registration-closed-note">Download your child\'s <b>participation certificate</b> from <b>Find My Ticket</b>.</p>'
-      +'<div class="registration-closed-actions"><a class="btn" href="/find-ticket.html">Get Certificate</a><button type="button" class="secondary" autofocus>Close</button></div>'
+      ?'<p class="registration-closed-icon" aria-hidden="true">🏅</p><h2 id="registrationClosedTitle">Participation Certificates are Live!</h2>'
+      +'<p>Thank you for being part of the 3rd Inter-School Swimming Competition 2026. Your child\'s <b>participation certificate</b> is ready — please download it.</p>'
+      +'<p class="registration-closed-note">Tap below, enter the parent\'s phone number and the swimmer\'s date of birth, then tap <b>Download Participation Certificate</b>.</p>'
+      +'<div class="registration-closed-actions stacked"><a class="btn" href="/find-ticket.html">Download Certificate — Find My Ticket</a><button type="button" class="secondary">Close</button></div>'
       :'<p class="registration-closed-icon" aria-hidden="true">🏊</p><h2 id="registrationClosedTitle">Registrations Closed</h2>'
       +'<p>Registrations for the 3rd Inter-School Swimming Competition are now closed. Thank you for the amazing response!</p>'
       +'<p class="registration-closed-note">Already registered? Use <b>Find My Ticket</b> to get your entry pass. See you on <b>4 October 2026</b> in Vadodara.</p>'
