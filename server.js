@@ -233,9 +233,18 @@ app.get('/api/public/results',async(req,res)=>{
   res.json(Object.values(g));
 });
 
+// Live timings: every saved time is public straight away; events not yet published from the Results desk are marked provisional.
 app.get('/api/public/timings',async(req,res)=>{
-  const rows=await q(`SELECT te.event_key,te.heat_no,te.timing_text,te.status,r.full_name,r.school_name FROM timing_entries te JOIN registrations r ON r.registration_id=te.registration_id JOIN event_publication ep ON ep.event_key=te.event_key AND ep.published=TRUE ORDER BY te.event_key,te.heat_no,r.full_name`);
-  res.json(rows.map(x=>({...x,meta:parseEventKey(x.event_key)})));
+  res.set('Cache-Control','no-store');
+  const rows=await q(`SELECT te.event_key,te.heat_no,te.timing_text,te.status,te.updated_at,r.full_name,r.school_name,re.lane_no,COALESCE(ep.published,FALSE) published
+    FROM timing_entries te JOIN registrations r ON r.registration_id=te.registration_id
+    LEFT JOIN race_entries re ON re.event_key=te.event_key AND re.registration_id=te.registration_id
+    LEFT JOIN event_publication ep ON ep.event_key=te.event_key
+    WHERE te.status<>'PENDING' AND (te.status<>'TIME' OR COALESCE(te.timing_text,'')<>'')`);
+  const order=new Map();let n=0;
+  for(const c of CATEGORIES)for(const gender of ['Boys','Girls'])for(const event of c.events)order.set(eventKey(c.name,gender,event),n++);
+  const label=meta=>CATEGORIES.find(c=>c.name===meta.category)?.eventLabels?.[meta.event]||meta.event;
+  res.json(rows.map(x=>{const meta=parseEventKey(x.event_key);return {event_key:x.event_key,heat_no:x.heat_no,lane_no:x.lane_no,timing_text:x.timing_text,status:x.status,full_name:x.full_name,school_name:x.school_name,published:x.published,updated_at:x.updated_at,order:order.get(x.event_key)??9999,meta:{...meta,label:label(meta)}}}));
 });
 
 app.post('/api/admin/login',(req,res)=>{if(req.body?.pin===process.env.ADMIN_PIN){req.session.admin=true;req.session.operator='Admin';return res.json({ok:true})}res.status(403).json({error:'Incorrect PIN'})});

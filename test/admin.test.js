@@ -284,4 +284,17 @@ test('admin end-to-end API regression',async t=>{
   assert.match(csv.headers.get('content-disposition'),/bsf-registrations-Checked-in-/);
   assert.equal((await csv.text()).trim().split('\r\n').length-1,approved.length,'CSV has only checked-in swimmers');
  });
+ await t.test('live public timings: saved times show straight away, provisional until published',async()=>{
+  const key=eventKey('Under-12','Girls','25m Freestyle');
+  const a=await register({gender:'Girls',fullName:'<b>Live</b> Swimmer A',events:JSON.stringify(['25m Freestyle'])}),b=await register({gender:'Girls',fullName:'Live Swimmer B',events:JSON.stringify(['25m Freestyle'])}),c=await register({gender:'Girls',fullName:'Live Swimmer C',events:JSON.stringify(['25m Freestyle'])});
+  assert.equal((await api('/api/admin/seed-heats',{eventKey:key,lanes:6})).status,200);
+  const save=(id,timingText,status)=>api('/api/admin/timing',{eventKey:key,heatNo:1,registrationId:id,timingText,status});
+  assert.equal((await save(a.registrationId,'00:31.20','TIME')).status,200);assert.equal((await save(b.registrationId,'','DNS')).status,200);assert.equal((await save(c.registrationId,'','PENDING')).status,200);
+  const live=async()=>(await (await fetch(base+'/api/public/timings')).json()).filter(r=>r.event_key===key);
+  let rows=await live();
+  assert.deepEqual(rows.map(r=>[r.full_name,r.status,r.timing_text||'',r.published]).sort(),[['<b>Live</b> Swimmer A','TIME','00:31.20',false],['Live Swimmer B','DNS','',false]].sort(),'PENDING hidden, time and DNS shown live');
+  assert.ok(rows.every(r=>r.meta.label==='25m Freestyle'&&r.lane_no>=1&&Number.isInteger(r.order)));
+  assert.equal((await api('/api/admin/publish-event',{eventKey:key})).status,200);
+  rows=await live();assert.ok(rows.length&&rows.every(r=>r.published===true),'official after publish');
+ });
 });
