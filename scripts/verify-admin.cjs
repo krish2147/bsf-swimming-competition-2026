@@ -87,11 +87,12 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
     await page.locator('#timingSearch').fill(participant);await page.waitForFunction(p=>document.getElementById('out').textContent.includes(p),participant);
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:path.join(artifacts,`${name}-live-timings.png`),fullPage:true});}
    await page.goto(base+'/admin/results.html');await page.waitForFunction(()=>document.getElementById('event').options.length>1);await page.locator('#event').selectOption(key);await page.locator('#p1').selectOption(id);await page.locator('[data-position="1"]').click();await page.waitForFunction(()=>document.getElementById('msg').textContent==='Saved privately.');
-   await page.goto(base+'/results.html');await page.waitForFunction(p=>document.getElementById('out').textContent.includes(p),participant);
-   {const card=page.locator('.live-event').filter({hasText:'25m Freestyle'}).filter({hasText:'Under-12 • Boys'});
+   await page.goto(base+'/results.html');await page.waitForFunction(()=>document.getElementById('pickCategory').options.length>0);
+   await page.locator('#pickCategory').selectOption('Under-12');await page.locator('#pickGender').selectOption('Boys');await page.locator('#pickEvent').selectOption(key);
+   await page.waitForFunction(p=>document.getElementById('out').textContent.includes(p),participant);
+   {const card=page.locator('.live-event');assert.ok((await card.textContent()).includes('Under-12 • Boys'));
     assert.match(await card.locator('.pill').textContent(),/Live · provisional|Official/);assert.ok((await card.locator('.podium').textContent()).includes('🥇'));
-    await page.locator('#resultSearch').fill('no such swimmer zzz');await page.waitForFunction(()=>document.getElementById('out').textContent.includes('No results match'));
-    await page.locator('#resultSearch').fill(participant);await page.waitForFunction(p=>document.getElementById('out').textContent.includes(p),participant);
+    assert.ok(new URL(page.url()).hash.includes('Under-12'));await page.reload();await page.waitForFunction(p=>document.getElementById('out').textContent.includes(p),participant);
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:path.join(artifacts,`${name}-live-results.png`),fullPage:true});}
    await page.goto(base+'/admin/checkin.html?token='+token);await page.locator('#approve').waitFor();await page.locator('#approve').click();await page.waitForFunction(()=>document.getElementById('checkinStatus').textContent==='Approved');
    await page.goto(base+'/admin/');await page.getByRole('button',{name:id,exact:true}).waitFor();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
