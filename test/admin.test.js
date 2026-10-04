@@ -303,6 +303,9 @@ test('admin end-to-end API regression',async t=>{
   assert.equal((await api('/api/admin/seed-heats',{eventKey:key,lanes:2})).status,200);
   const slots=(await query('SELECT registration_id,heat_no FROM race_entries WHERE event_key=$1',[key])).rows,heatOf=id=>slots.find(r=>r.registration_id===id).heat_no;
   const event=async()=>(await (await fetch(base+'/api/public/results')).json()).find(e=>e.event_key===key);
+  process.env.TOURNAMENT='closed';
+  try{assert.deepEqual(await (await fetch(base+'/api/public/timings')).json(),{closed:true},'tournament closed: no public timings');assert.equal((await (await fetch(base+'/api/config')).json()).tournamentClosed,true)}finally{process.env.TOURNAMENT='open'}
+  assert.equal((await (await fetch(base+'/api/config')).json()).tournamentClosed,false);assert.ok(Array.isArray(await (await fetch(base+'/api/public/timings')).json()));
   process.env.PUBLIC_RESULTS='closed';
   try{assert.deepEqual(await (await fetch(base+'/api/public/results')).json(),{closed:true},'results closed: nothing public')}finally{process.env.PUBLIC_RESULTS='open'}
   let e=await event();

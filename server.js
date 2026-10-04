@@ -87,8 +87,11 @@ function registrationClosesAt(){
 const registrationOpen=()=>Date.now()<registrationClosesAt().getTime();
 const REGISTRATION_CLOSED_MESSAGE='Registration for the competition is now closed. If you already registered, use Find My Ticket to get your ticket.';
 
+// The competition is over: the public site shows a thank-you, live timings are closed. Set TOURNAMENT=open to undo.
+const tournamentOpen=()=>String(process.env.TOURNAMENT||'').toLowerCase()==='open';
 app.get('/api/config',(req,res)=>res.json({
   registrationOpen:registrationOpen(),
+  tournamentClosed:!tournamentOpen(),
   // A logged-in admin can still add late entries through the normal form after registration closes.
   lateEntry:!registrationOpen()&&!!req.session?.admin,
   registrationClosesAt:registrationClosesAt().toISOString(),
@@ -256,6 +259,7 @@ app.get('/api/public/results',async(req,res)=>{
 // Live timings: every saved time is public straight away; events not yet published from the Results desk are marked provisional.
 app.get('/api/public/timings',async(req,res)=>{
   res.set('Cache-Control','no-store');
+  if(!tournamentOpen())return res.json({closed:true});
   const rows=await q(`SELECT te.event_key,te.heat_no,te.timing_text,te.status,te.updated_at,r.full_name,r.school_name,re.lane_no,COALESCE(ep.published,FALSE) published
     FROM timing_entries te JOIN registrations r ON r.registration_id=te.registration_id
     LEFT JOIN race_entries re ON re.event_key=te.event_key AND re.registration_id=te.registration_id
