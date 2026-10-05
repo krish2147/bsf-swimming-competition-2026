@@ -343,10 +343,24 @@ test('admin end-to-end API regression',async t=>{
   assert.deepEqual(e.standings.map(s=>s.timing_text).slice(2),['35.10s'],'shown as typed');assert.deepEqual(e.standings.slice(0,2).map(s=>s.full_name).sort(),['Results Swimmer Q','Results Swimmer R']);
   assert.deepEqual(e.standings.map(s=>s.rank),[1,1,3],'tie shares first place');assert.equal(e.standings[2].full_name,'Results Swimmer P');
   assert.ok(new Set(e.standings.map(s=>s.heat_no)).size>=1);assert.deepEqual(e.notFinished.map(s=>[s.full_name,s.status]),[['Results Swimmer S','DQ']]);
+  {const pos=async kid=>(await (await fetch(base+'/api/ticket/'+kid.ticketToken)).json()).meritCertificates.map(m=>m.position);
+   assert.deepEqual([await pos(kids[1]),await pos(kids[2]),await pos(kids[0]),await pos(kids[3])],[[1],[1],[3],[]],'before publishing: live standings, tie shares 1st');
+   const found=await (await fetch(base+'/api/ticket-recovery',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:'9988776655',dob:'2013-01-01'})})).json();
+   assert.ok(found.matches.some(m=>m.meritCertificates.length===1&&m.meritCertificates[0].url.startsWith('/api/merit-certificate/')),'Find My Ticket lists merit certificates');}
   for(const [position,kid] of [[1,kids[1]],[2,kids[2]],[3,kids[0]]])assert.equal((await api('/api/admin/result',{eventKey:key,position,registrationId:kid.registrationId})).status,200);
   e=await event();assert.deepEqual(e.official,[],'podium hidden until published');
   assert.equal((await api('/api/admin/publish-event',{eventKey:key})).status,200);
   e=await event();assert.equal(e.published,true);
   assert.deepEqual(e.official.map(p=>[p.position,p.full_name,p.timing_text]),[[1,'Results Swimmer Q','00:33.00'],[2,'Results Swimmer R','0:33:00'],[3,'Results Swimmer P','35.10s']]);
+  assert.ok(!JSON.stringify(await (await fetch(base+'/api/public/results')).json()).includes('registration_id'),'no registration IDs in public results');
+  // Merit certificates: official podium Q 1st, R 2nd, P 3rd; S (DQ) none.
+  const ticket=async kid=>(await (await fetch(base+'/api/ticket/'+kid.ticketToken)).json()).meritCertificates;
+  assert.deepEqual((await ticket(kids[1])).map(m=>[m.position,m.positionLabel,m.event]),[[1,'1st','50m Freestyle']]);
+  assert.deepEqual((await ticket(kids[2])).map(m=>m.position),[2]);assert.deepEqual((await ticket(kids[0])).map(m=>m.position),[3]);assert.deepEqual(await ticket(kids[3]),[]);
+  const merit=await fetch(base+(await ticket(kids[1]))[0].url);assert.equal(merit.status,200);assert.equal(merit.headers.get('content-type'),'application/pdf');
+  assert.match(merit.headers.get('content-disposition'),/BSF-Merit-Certificate-Results-Swimmer-Q-50m-Freestyle-1st\.pdf/);
+  assert.equal((await fetch(base+`/api/merit-certificate/${kids[3].ticketToken}?event=${encodeURIComponent(key)}`)).status,404,'no medal, no merit certificate');
+  assert.equal((await fetch(base+`/api/merit-certificate/not-a-token?event=${encodeURIComponent(key)}`)).status,404);
+  process.env.PUBLIC_RESULTS='closed';try{assert.deepEqual(await ticket(kids[1]),[]);assert.equal((await fetch(base+(`/api/merit-certificate/${kids[1].ticketToken}?event=${encodeURIComponent(key)}`))).status,403)}finally{process.env.PUBLIC_RESULTS='open'}
  });
 });

@@ -94,6 +94,7 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
     assert.match(await card.locator('.pill').textContent(),/Live · provisional|Official/);assert.ok((await card.locator('.podium').textContent()).includes('🥇'));
     assert.ok(new URL(page.url()).hash.includes('Under-12'));await page.reload();await page.waitForFunction(p=>document.getElementById('out').textContent.includes(p),participant);
     assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.screenshot({path:path.join(artifacts,`${name}-live-results.png`),fullPage:true});}
+   await page.goto(base+'/success.html?token='+token);{const merit=page.locator('a.merit-certificate').first();await merit.waitFor({state:'attached'});assert.match(await merit.textContent(),/Merit Certificate — 1st · 25m Freestyle/);assert.match(await merit.getAttribute('href'),/^\/api\/merit-certificate\//);}
    await page.goto(base+'/admin/checkin.html?token='+token);await page.locator('#approve').waitFor();await page.locator('#approve').click();await page.waitForFunction(()=>document.getElementById('checkinStatus').textContent==='Approved');
    await page.goto(base+'/admin/');await page.getByRole('button',{name:id,exact:true}).waitFor();assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
    await page.getByRole('button',{name:'Show checked-in registrations'}).click();await page.waitForFunction(()=>document.getElementById('checkinFilter').value==='Approved');

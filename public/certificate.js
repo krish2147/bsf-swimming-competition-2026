@@ -8,6 +8,12 @@
     if(data.certificateAvailable){
       const download=()=>{location.href=data.certificateUrl};
       button.hidden=false;button.onclick=download;
+      // Merit certificates: one per event where the swimmer finished 1st, 2nd or 3rd.
+      const medal={1:'🥇',2:'🥈',3:'🥉'};let after=button;
+      for(const m of data.meritCertificates||[]){
+        const link=document.createElement('a');link.className='btn merit-certificate';link.href=m.url;
+        link.textContent=`${medal[m.position]||'🏅'} Download Merit Certificate — ${m.positionLabel} · ${m.event}`;after.after(link);after=link;
+      }
       // The WhatsApp popup opens over the ticket on a first visit, so offer the certificate there too.
       const popupActions=document.querySelector('.whatsapp-dialog-actions');
       if(popupActions&&!document.getElementById('popupDownloadCertificate')){const popupButton=document.createElement('button');popupButton.type='button';popupButton.id='popupDownloadCertificate';popupButton.textContent='Download Participation Certificate';popupButton.onclick=download;popupActions.prepend(popupButton)}

@@ -93,3 +93,4 @@ nav.co-branded-header .nav-cta{margin-left:0}
 .result-pickers{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:8px}.podium-1{border-color:#e9c46a;background:#fffbea}.podium-2{border-color:#cfd6dd}.podium-3{border-color:#e3b58f}
 .registration-closed-actions.stacked{flex-direction:column}
 .podium-row>div{min-width:0;overflow-wrap:anywhere}
+.btn.merit-certificate,.btn.merit-recovery{background:#c99a2e;color:#1b1405;border-color:#b0862a}.btn.merit-certificate:hover,.btn.merit-recovery:hover{background:#b0862a}
