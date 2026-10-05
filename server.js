@@ -273,10 +273,10 @@ async function eventResults({withIds=false}={}){
 // Medal positions (1st–3rd) per registration, decided exactly as the Results page shows them: the official podium once
 // an event is published from the Results desk, otherwise the live standings across all heats (tied times share a place).
 async function medalsByRegistration(){
-  const medals=new Map(),add=(id,e,position)=>{if(!medals.has(id))medals.set(id,[]);medals.get(id).push({eventKey:e.event_key,event:e.meta.label,category:e.meta.category,position})};
+  const medals=new Map(),add=(id,e,position,time)=>{if(!medals.has(id))medals.set(id,[]);medals.get(id).push({eventKey:e.event_key,event:e.meta.label,category:e.meta.category,position,time:time||null})};
   for(const e of await eventResults({withIds:true})){
-    if(e.published&&e.official.length)for(const p of e.official){if(p.position>=1&&p.position<=3)add(p.registration_id,e,p.position)}
-    else for(const st of e.standings)if(st.rank<=3)add(st.registration_id,e,st.rank);
+    if(e.published&&e.official.length)for(const p of e.official){if(p.position>=1&&p.position<=3)add(p.registration_id,e,p.position,p.timing_text)}
+    else for(const st of e.standings)if(st.rank<=3)add(st.registration_id,e,st.rank,st.timing_text);
   }
   return medals;
 }
@@ -290,7 +290,7 @@ async function bestSwimmers({withIds=false}={}){
   for(const r of regs){
     const list=medals.get(r.registration_id),count=p=>list.filter(m=>m.position===p).length;
     const swimmer={registration_id:r.registration_id,has_photo:r.has_photo,full_name:r.full_name,school_name:r.school_name,gold:count(1),silver:count(2),bronze:count(3),points:list.reduce((t,m)=>t+(MEDAL_POINTS[m.position]||0),0),
-      medals:list.map(m=>({event:m.event,position:m.position})).sort((a,b)=>a.position-b.position||a.event.localeCompare(b.event))};
+      medals:list.map(m=>({event:m.event,position:m.position,time:m.time})).sort((a,b)=>a.position-b.position||a.event.localeCompare(b.event))};
     const key=`${r.age_category}|${r.gender}`;if(!groups.has(key))groups.set(key,{category:r.age_category,gender:r.gender,order:order.get(key)??9999,swimmers:[]});groups.get(key).swimmers.push(swimmer);
   }
   const cmp=(a,b)=>b.points-a.points||b.gold-a.gold||b.silver-a.silver;
