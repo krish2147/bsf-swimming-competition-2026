@@ -46,9 +46,10 @@
         const actions=document.createElement('div');actions.className='recovery-actions';
         const ticket=buttonLink('Open / Download Ticket',item.ticketUrl);ticket.addEventListener('click',()=>{try{sessionStorage.setItem(`bsf-whatsapp-opened-${new URL(item.ticketUrl,location.origin).searchParams.get('token')}`,'1')}catch{}});
         const join=buttonLink('Join WhatsApp Group',whatsapp,'whatsapp-recovery');join.target='_blank';join.rel='noopener noreferrer';
-        const certificate=item.certificateAvailable?buttonLink('Download Participation Certificate',item.certificateUrl,'certificate-recovery'):null;
+        const certs=item.participationCertificates?.length?item.participationCertificates:[{event:'',url:item.certificateUrl}];
+        const certificate=item.certificateAvailable?certs.map(c=>buttonLink(certs.length>1?`Download Participation Certificate — ${c.event}`:'Download Participation Certificate',c.url,'certificate-recovery')):[];
         const medal={1:'🥇',2:'🥈',3:'🥉'},merits=(item.meritCertificates||[]).map(m=>buttonLink(`${medal[m.position]||'🏅'} Merit Certificate — ${m.positionLabel} · ${m.event}`,m.url,'merit-recovery'));
-        actions.append(...[ticket,certificate,...merits,join].filter(Boolean));card.append(title,school,id,actions);results.append(card);
+        actions.append(...[ticket,...certificate,...merits,join].filter(Boolean));card.append(title,school,id,actions);results.append(card);
       }
     }catch(error){showStatus(error.message,true)}finally{submit.disabled=false}
   });

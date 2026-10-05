@@ -232,18 +232,23 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
     process.env.CERTIFICATES_FROM=new Date(Date.now()-1000).toISOString();
     await page.evaluate(()=>sessionStorage.clear());
     await page.goto(base+'/success.html?token='+kid.ticket_token);
-    // First visit: the WhatsApp popup is open over the ticket and offers the certificate too.
+    // First visit: the WhatsApp popup is open over the ticket and offers the certificates too (one per event).
+    const certs=await page.evaluate(async t=>(await (await fetch('/api/ticket/'+t)).json()).participationCertificates,kid.ticket_token);assert.ok(certs.length>=1);
     const popupButton=page.locator('#popupDownloadCertificate');await popupButton.waitFor();
-    const [fromPopup]=await Promise.all([page.waitForEvent('download'),popupButton.tap()]);assert.equal(fromPopup.suggestedFilename(),'BSF-Participation-Certificate-Browser-tablet-Swimmer.pdf');
-    await page.getByRole('button',{name:'Stay on ticket page'}).tap();
+    if(certs.length>1){assert.equal(await popupButton.textContent(),'Download Participation Certificates');await popupButton.tap();await page.locator('#stayOnTicket').waitFor({state:'hidden'});}
+    else{const [fromPopup]=await Promise.all([page.waitForEvent('download'),popupButton.tap()]);assert.match(fromPopup.suggestedFilename(),/^BSF-Participation-Certificate-Browser-tablet-Swimmer-.+\.pdf$/);await page.getByRole('button',{name:'Stay on ticket page'}).tap();}
     const button=page.locator('#downloadCertificate');await button.waitFor();
+    assert.equal(await page.locator('a.participation-certificate').count(),certs.length-1,'one button per event');
+    if(certs.length>1)assert.equal(await button.textContent(),'Download Participation Certificate — '+certs[0].event);
     const [certificate]=await Promise.all([page.waitForEvent('download'),button.tap()]);
-    assert.equal(certificate.suggestedFilename(),'BSF-Participation-Certificate-Browser-tablet-Swimmer.pdf');assert.equal((await fs.readFile(await certificate.path())).subarray(0,5).toString(),'%PDF-');
+    assert.equal(certificate.suggestedFilename(),'BSF-Participation-Certificate-Browser-tablet-Swimmer-'+certs[0].event.replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'')+'.pdf');assert.equal((await fs.readFile(await certificate.path())).subarray(0,5).toString(),'%PDF-');
+    await page.screenshot({path:path.join(artifacts,'ticket-certificates.png'),fullPage:true});
     await page.goto(base+'/find-ticket.html');await page.locator('#recoveryPhone').fill(kid.phone);await page.locator('#recoveryDob').fill(kid.dob);await page.locator('#recoverySubmit').tap();
-    const link=page.getByRole('link',{name:'Download Participation Certificate'}).first();await link.waitFor();assert.equal(await link.getAttribute('href'),'/api/certificate/'+kid.ticket_token);
+    const links=page.getByRole('link',{name:/^Download Participation Certificate/});await links.first().waitFor();
+    assert.ok(await links.count()>=certs.length);assert.ok((await links.first().getAttribute('href')).startsWith('/api/certificate/'+kid.ticket_token+'?event='));
     await page.screenshot({path:path.join(artifacts,'find-ticket-certificate.png'),fullPage:true});
     assert.deepEqual(errors,[],'certificate page errors');
-    console.log('PASS participation certificate: note before competition day; download from ticket page; link on Find My Ticket');
+    console.log('PASS participation certificate: note before competition day; one certificate per event on the ticket page and Find My Ticket');
    }finally{if(previous===undefined)delete process.env.CERTIFICATES_FROM;else process.env.CERTIFICATES_FROM=previous;await context.close()}
   }
   // Admin manual entry from the dashboard (phone-sized): minimal details, events follow the DOB category.
