@@ -92,3 +92,4 @@ nav.co-branded-header .nav-cta{margin-left:0}
 .podium{display:grid;gap:8px;margin:12px 0}.podium-row{display:grid;grid-template-columns:40px 1fr auto;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:#fbfdff}.podium-medal{font-size:26px;text-align:center;font-weight:800}.all-results summary{cursor:pointer;font-weight:700;color:var(--accent);padding:8px 0}.result-hit td{background:#fff8db}
 .result-pickers{grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:8px}.podium-1{border-color:#e9c46a;background:#fffbea}.podium-2{border-color:#cfd6dd}.podium-3{border-color:#e3b58f}
 .registration-closed-actions.stacked{flex-direction:column}
+.podium-row>div{min-width:0;overflow-wrap:anywhere}

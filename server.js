@@ -239,6 +239,14 @@ const publicResultsOpen=()=>String(process.env.PUBLIC_RESULTS||'').toLowerCase()
 app.get('/api/public/results',async(req,res)=>{
   res.set('Cache-Control','no-store');
   if(!publicResultsOpen())return res.json({closed:true});
+  res.json(await eventResults());
+});
+// Admin preview: the same results, always available to a logged-in admin, so they can be checked before going public.
+app.get('/api/admin/results-preview',requireAdmin,async(req,res)=>{
+  res.set('Cache-Control','no-store');
+  res.json({publicOpen:publicResultsOpen(),events:await eventResults()});
+});
+async function eventResults(){
   // Built from the heat list: every swimmer placed in a heat is listed (with heat and lane), plus any timed swimmer not in it.
   const timings=await q(`SELECT COALESCE(he.event_key,te.event_key) event_key,COALESCE(he.heat_no,te.heat_no) heat_no,he.lane_no,te.timing_text,te.status,r.registration_id,r.full_name,r.school_name
     FROM race_entries he FULL JOIN (SELECT * FROM timing_entries WHERE status IN ('TIME','DNS','DQ')) te ON te.event_key=he.event_key AND te.registration_id=he.registration_id
@@ -254,8 +262,8 @@ app.get('/api/public/results',async(req,res)=>{
   }
   for(const e of events.values()){e.standings.sort((a,b)=>a.seconds-b.seconds);e.standings.forEach((s,i)=>{s.rank=i&&s.seconds===e.standings[i-1].seconds?e.standings[i-1].rank:i+1});for(const s of e.standings)delete s.seconds}
   for(const p of podium)eventFor(p.event_key).official.push({position:p.position,full_name:p.full_name,school_name:p.school_name,timing_text:timeOf.get(`${p.event_key}|${p.registration_id}`)||null});
-  res.json([...events.values()].filter(e=>e.standings.length||e.official.length||e.notFinished.length||e.awaiting.length).sort((a,b)=>a.order-b.order));
-});
+  return [...events.values()].filter(e=>e.standings.length||e.official.length||e.notFinished.length||e.awaiting.length).sort((a,b)=>a.order-b.order);
+}
 
 // Live timings: every saved time is public straight away; events not yet published from the Results desk are marked provisional.
 app.get('/api/public/timings',async(req,res)=>{
