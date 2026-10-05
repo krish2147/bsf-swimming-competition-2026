@@ -16,7 +16,8 @@
       else if(config.registrationOpen){strong.textContent='Registration Deadline:';if(extended)notice.append(extended,' ');notice.append(strong,' ',time)}
       else{notice.classList.add('registration-closed');strong.textContent='Registration closed';notice.append(strong,' on ',time,'. Already registered? ');const link=document.createElement('a');link.href='/find-ticket.html';link.textContent='Find My Ticket';notice.append(link,'.')}
     }
-    if(!config.registrationOpen&&!config.lateEntry)showClosedPopup(config.tournamentClosed);
+    // No popup once the competition is over; the notice above links to the certificates instead.
+    if(!config.registrationOpen&&!config.lateEntry&&!config.tournamentClosed)showClosedPopup(false);
     return config;
   }).catch(()=>null);
   // Popup shown each time a public page is opened after registration has closed; once the competition is over
