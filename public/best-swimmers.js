@@ -36,14 +36,20 @@
   dialog.addEventListener('click',e=>{if(e.target===dialog||e.target.closest('[data-close]'))dialog.close()});
   out.addEventListener('click',e=>{
     const row=e.target.closest('[data-champion]');if(!row)return;const c=champs[Number(row.dataset.champion)];if(!c)return;
-    dialog.innerHTML=`<div class="champion-dialog-body"><button type="button" class="secondary champion-close" data-close aria-label="Close">×</button>
-      ${c.photo?`<img class="champion-dialog-photo" src="${esc(c.photo)}" alt="Photo of ${esc(c.full_name)}">`:'<div class="champion-dialog-trophy" aria-hidden="true">🏆</div>'}
-      <div class="eyebrow">🏆 Best Swimmer${c.shared?' (shared)':''} · ${esc(c.group.category)} • ${esc(c.group.gender)}</div>
-      <h2 id="championName">${esc(c.full_name)}</h2><p class="muted">${esc(c.school_name)}</p>
-      <table class="live-table"><thead><tr><th>Medal</th><th>Event</th><th>Time</th></tr></thead><tbody>
-      ${c.medals.map(m=>`<tr><td>${medal[m.position]} ${({1:'1st',2:'2nd',3:'3rd'})[m.position]}</td><td>${esc(m.event)}</td><td class="live-time">${esc(m.time||'—')}</td></tr>`).join('')}
-      </tbody></table><p class="champion-points"><b>${c.points}</b> points · 🥇 ${c.gold} · 🥈 ${c.silver} · 🥉 ${c.bronze}</p></div>`;
-    dialog.addEventListener('error',ev=>{if(ev.target.matches?.('.champion-dialog-photo'))ev.target.replaceWith(Object.assign(document.createElement('div'),{className:'champion-dialog-trophy',textContent:'🏆'}))},{capture:true,once:true});
+    const g=c.group,word='CONGRATULATIONS',medalWords=[c.gold&&`${c.gold} gold`,c.silver&&`${c.silver} silver`,c.bronze&&`${c.bronze} bronze`].filter(Boolean);
+    dialog.innerHTML=`<div class="congrats-card"><button type="button" class="congrats-close" data-close aria-label="Close">×</button>
+      <div class="congrats-brand"><img src="/bsf-logo.jpeg" alt=""><span>3rd Inter-School<br>Swimming 2026</span></div>
+      <i class="confetti c1"></i><i class="confetti c2"></i><i class="confetti c3"></i><i class="confetti c4"></i>
+      <div class="congrats-hero"><div class="congrats-word" aria-hidden="true"><span>${word}</span><span>${word}</span><span>${word}</span></div>
+        ${c.photo?`<img class="champion-dialog-photo congrats-photo" src="${esc(c.photo)}" alt="Photo of ${esc(c.full_name)}">`:'<div class="champion-dialog-trophy congrats-photo" aria-hidden="true">🏊</div>'}
+        <span class="congrats-trophy" aria-hidden="true">🏆</span></div>
+      <h2 id="championName" class="congrats-name">${esc(c.full_name)}</h2>
+      <div class="congrats-title">Best Swimmer${c.shared?' (shared)':''} · ${esc(g.category)} ${esc(g.gender)}</div>
+      <p class="congrats-text">With great pride, we congratulate <b>${esc(c.full_name)}</b> of ${esc(c.school_name)} on being crowned <b>Best Swimmer</b> of the ${esc(g.category)} ${esc(g.gender)} category — winning <b>${medalWords.join(', ')}</b> for <b>${c.points} points</b>. A truly outstanding swim!</p>
+      <ul class="congrats-times">${c.medals.map(m=>`<li><span>${medal[m.position]} ${({1:'1st',2:'2nd',3:'3rd'})[m.position]}</span><span>${esc(m.event)}</span><b>${esc(m.time||'—')}</b></li>`).join('')}</ul>
+      <div class="congrats-foot"><div class="congrats-logos"><span><img src="/aark-logo.png" alt="AARK International School"></span><span><img src="/bsf-logo.jpeg" alt="Baroda Swim Front"></span></div><div class="congrats-where">AARK International School<br>× Baroda Swim Front<br>Vadodara · 4 October 2026</div></div>
+    </div>`;
+    dialog.addEventListener('error',ev=>{if(ev.target.matches?.('.champion-dialog-photo'))ev.target.replaceWith(Object.assign(document.createElement('div'),{className:'champion-dialog-trophy congrats-photo',textContent:'🏊'}))},{capture:true,once:true});
     if(typeof dialog.showModal==='function')dialog.showModal();else dialog.setAttribute('open','');
   });
   // A missing or broken photo falls back to the trophy.
