@@ -19,3 +19,11 @@ test('certificate fonts cover every character the form allows in names and schoo
     for(const ch of "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .,'’&()-/:")assert.ok(font.hasGlyphForCodePoint(ch.codePointAt(0)),`${file} missing ${ch}`);
   }
 });
+
+test('merit certificate is the signed merit design with position, event and age group',async()=>{
+  const {meritCertificatePdf,ordinal}=require('../src/certificate');
+  assert.deepEqual([1,2,3].map(ordinal),['1st','2nd','3rd']);
+  const doc=await PDFDocument.load(await meritCertificatePdf({fullName:'Kalp Shah',schoolName:'Test School',category:'Under-14',event:'25m Freestyle',position:1,registrationId:'BSF26-0002'}));
+  assert.equal(doc.getPageCount(),1);assert.equal(doc.getTitle(),'Certificate of Merit — Kalp Shah');
+  const {width,height}=doc.getPage(0).getSize();assert.equal(Math.round(width),595);assert.equal(Math.round(height),842);
+});

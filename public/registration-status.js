@@ -27,7 +27,7 @@
     dialog.innerHTML=concluded
       ?'<p class="registration-closed-icon" aria-hidden="true">🏅</p><h2 id="registrationClosedTitle">Participation Certificates are Live!</h2>'
       +'<p>Thank you for being part of the 3rd Inter-School Swimming Competition 2026. Your child\'s <b>participation certificate</b> is ready — please download it.</p>'
-      +'<p class="registration-closed-note">Tap below, enter the parent\'s phone number and the swimmer\'s date of birth, then tap <b>Download Participation Certificate</b>.</p>'
+      +'<p class="registration-closed-note">Tap below, enter the parent\'s phone number and the swimmer\'s date of birth, then tap <b>Download Participation Certificate</b>. 🥇🥈🥉 Medal winners can also download their <b>Merit Certificate</b> there.</p>'
       +'<div class="registration-closed-actions stacked"><a class="btn" href="/find-ticket.html">Download Certificate — Find My Ticket</a><button type="button" class="secondary">Close</button></div>'
       :'<p class="registration-closed-icon" aria-hidden="true">🏊</p><h2 id="registrationClosedTitle">Registrations Closed</h2>'
       +'<p>Registrations for the 3rd Inter-School Swimming Competition are now closed. Thank you for the amazing response!</p>'

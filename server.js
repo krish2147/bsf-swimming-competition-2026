@@ -11,7 +11,7 @@ const {CATEGORIES,categoryForDob,eventKey,parseEventKey}=require('./src/competit
 const {registrationEvents,registrationRow,registrationColumns}=require('./src/admin-data');
 const {planHeats}=require('./src/heats');
 const {heatSheetPdf,heatSheetDocx,buildHeatSheet,heatListDocx}=require('./src/heat-sheets');
-const {certificatePdf}=require('./src/certificate');
+const {certificatePdf,meritCertificatePdf,ordinal}=require('./src/certificate');
 const {requiresFloaters}=require('./public/floater-policy');
 const {assignHeats,heatSizes}=require('./public/heat-layout');
 const timingSeconds=require('./public/timing-parse');
@@ -189,7 +189,7 @@ app.get('/api/ticket/:token',async(req,res)=>{
   const r=(await q('SELECT registration_id,ticket_token,full_name,school_name,age_category,gender,events_json,amount,payment_status FROM registrations WHERE ticket_token=$1',[req.params.token]))[0];
   if(!r)return res.status(404).json({error:'Ticket not found'});
   const scanUrl=`${BASE_URL}/admin/checkin.html?token=${encodeURIComponent(r.ticket_token)}`;
-  res.json({registrationId:r.registration_id,fullName:r.full_name,schoolName:r.school_name,category:r.age_category,gender:r.gender,events:registrationEvents(r.events_json),amount:r.amount,paymentStatus:r.payment_status,requiresFloaters:requiresFloaters(CATEGORIES.find(c=>c.name===r.age_category),registrationEvents(r.events_json)),eventLabels:CATEGORIES.find(c=>c.name===r.age_category)?.eventLabels||{},competitionDate:'4 October 2026',registrationDeadline:'1 October 2026',venue:'Vadodara, Gujarat',checkinUrl:scanUrl,...certificateInfo(r.ticket_token),qrDataUrl:await QRCode.toDataURL(scanUrl,{margin:4,width:720}),token:r.ticket_token});
+  res.json({registrationId:r.registration_id,fullName:r.full_name,schoolName:r.school_name,category:r.age_category,gender:r.gender,events:registrationEvents(r.events_json),amount:r.amount,paymentStatus:r.payment_status,requiresFloaters:requiresFloaters(CATEGORIES.find(c=>c.name===r.age_category),registrationEvents(r.events_json)),eventLabels:CATEGORIES.find(c=>c.name===r.age_category)?.eventLabels||{},competitionDate:'4 October 2026',registrationDeadline:'1 October 2026',venue:'Vadodara, Gujarat',checkinUrl:scanUrl,...certificateInfo(r.ticket_token),meritCertificates:meritList(r.ticket_token,meritAvailable()?(await medalsByRegistration()).get(r.registration_id):[]),qrDataUrl:await QRCode.toDataURL(scanUrl,{margin:4,width:720}),token:r.ticket_token});
 });
 
 // Participation certificates: downloadable with the ticket link from competition day (CERTIFICATES_FROM overrides, ISO date-time).
@@ -217,12 +217,14 @@ app.post('/api/ticket-recovery',async(req,res)=>{
     const normalizePhone=value=>{const d=digits(value);return d.length>10?d.slice(-10):d};
     if(normalizePhone(phone).length!==10||!/^\d{4}-\d{2}-\d{2}$/.test(dob))return res.status(400).json({error:'Enter the registered 10-digit phone number and participant date of birth.'});
     const rows=await q('SELECT registration_id,ticket_token,full_name,school_name,phone FROM registrations WHERE dob=$1 ORDER BY created_at DESC',[dob]);
+    const medals=meritAvailable()?await medalsByRegistration():new Map();
     const matches=rows.filter(r=>normalizePhone(r.phone)===normalizePhone(phone)).slice(0,5).map(r=>({
       registrationId:r.registration_id,
       fullName:r.full_name,
       schoolName:r.school_name,
       ticketUrl:`/success.html?token=${encodeURIComponent(r.ticket_token)}`,
-      ...certificateInfo(r.ticket_token)
+      ...certificateInfo(r.ticket_token),
+      meritCertificates:meritList(r.ticket_token,medals.get(r.registration_id))
     }));
     if(!matches.length)return res.status(404).json({error:'No registration matched those details. Check the phone number and participant date of birth.'});
     res.json({ok:true,matches});
@@ -247,7 +249,7 @@ app.get('/api/admin/results-preview',requireAdmin,async(req,res)=>{
   res.set('Cache-Control','no-store');
   res.json({publicOpen:publicResultsOpen(),events:await eventResults()});
 });
-async function eventResults(){
+async function eventResults({withIds=false}={}){
   // Built from the heat list: every swimmer placed in a heat is listed (with heat and lane), plus any timed swimmer not in it.
   const timings=await q(`SELECT COALESCE(he.event_key,te.event_key) event_key,COALESCE(he.heat_no,te.heat_no) heat_no,he.lane_no,te.timing_text,te.status,r.registration_id,r.full_name,r.school_name
     FROM race_entries he FULL JOIN (SELECT * FROM timing_entries WHERE status IN ('TIME','DNS','DQ')) te ON te.event_key=he.event_key AND te.registration_id=he.registration_id
@@ -258,13 +260,40 @@ async function eventResults(){
   const events=new Map(),eventFor=key=>{if(!events.has(key)){const meta=parseEventKey(key);events.set(key,{event_key:key,meta:{...meta,label:CATEGORIES.find(c=>c.name===meta.category)?.eventLabels?.[meta.event]||meta.event},order:order.get(key)??9999,published:published.has(key),official:[],standings:[],notFinished:[],awaiting:[]})}return events.get(key)};
   const timeOf=new Map(timings.map(t=>[`${t.event_key}|${t.registration_id}`,t.timing_text]));
   for(const t of timings){
-    const e=eventFor(t.event_key),secs=t.status==='TIME'?timingSeconds(t.timing_text):null,swimmer={full_name:t.full_name,school_name:t.school_name,heat_no:t.heat_no,lane_no:t.lane_no};
+    const e=eventFor(t.event_key),secs=t.status==='TIME'?timingSeconds(t.timing_text):null,swimmer={registration_id:t.registration_id,full_name:t.full_name,school_name:t.school_name,heat_no:t.heat_no,lane_no:t.lane_no};
     if(secs!=null)e.standings.push({...swimmer,timing_text:t.timing_text,seconds:secs});else if(t.status==='DNS'||t.status==='DQ')e.notFinished.push({...swimmer,status:t.status});else e.awaiting.push(swimmer);
   }
   for(const e of events.values()){e.standings.sort((a,b)=>a.seconds-b.seconds);e.standings.forEach((s,i)=>{s.rank=i&&s.seconds===e.standings[i-1].seconds?e.standings[i-1].rank:i+1});for(const s of e.standings)delete s.seconds}
-  for(const p of podium)eventFor(p.event_key).official.push({position:p.position,full_name:p.full_name,school_name:p.school_name,timing_text:timeOf.get(`${p.event_key}|${p.registration_id}`)||null});
-  return [...events.values()].filter(e=>e.standings.length||e.official.length||e.notFinished.length||e.awaiting.length).sort((a,b)=>a.order-b.order);
+  for(const p of podium)eventFor(p.event_key).official.push({registration_id:p.registration_id,position:p.position,full_name:p.full_name,school_name:p.school_name,timing_text:timeOf.get(`${p.event_key}|${p.registration_id}`)||null});
+  const list=[...events.values()].filter(e=>e.standings.length||e.official.length||e.notFinished.length||e.awaiting.length).sort((a,b)=>a.order-b.order);
+  if(!withIds)for(const e of list)for(const group of [e.official,e.standings,e.notFinished,e.awaiting])for(const x of group)delete x.registration_id;
+  return list;
 }
+// Medal positions (1st–3rd) per registration, decided exactly as the Results page shows them: the official podium once
+// an event is published from the Results desk, otherwise the live standings across all heats (tied times share a place).
+async function medalsByRegistration(){
+  const medals=new Map(),add=(id,e,position)=>{if(!medals.has(id))medals.set(id,[]);medals.get(id).push({eventKey:e.event_key,event:e.meta.label,category:e.meta.category,position})};
+  for(const e of await eventResults({withIds:true})){
+    if(e.published&&e.official.length)for(const p of e.official){if(p.position>=1&&p.position<=3)add(p.registration_id,e,p.position)}
+    else for(const st of e.standings)if(st.rank<=3)add(st.registration_id,e,st.rank);
+  }
+  return medals;
+}
+// Merit certificates are offered only while results are public and certificates are available.
+const meritAvailable=()=>certificatesAvailable()&&publicResultsOpen();
+const meritList=(token,list=[])=>meritAvailable()?list.map(m=>({event:m.event,category:m.category,position:m.position,positionLabel:ordinal(m.position),url:`/api/merit-certificate/${encodeURIComponent(token)}?event=${encodeURIComponent(m.eventKey)}`})):[];
+app.get('/api/merit-certificate/:token',async(req,res)=>{
+  res.set('Cache-Control','no-store');
+  const r=(await q('SELECT registration_id,full_name,school_name,age_category FROM registrations WHERE ticket_token=$1',[req.params.token]))[0];
+  if(!r)return res.status(404).json({error:'Certificate not found. Please use the link from your ticket.'});
+  if(!meritAvailable())return res.status(403).json({error:'Merit certificates are not available yet.',code:'MERIT_NOT_YET_AVAILABLE'});
+  const medal=((await medalsByRegistration()).get(r.registration_id)||[]).find(m=>m.eventKey===req.query.event);
+  if(!medal)return res.status(404).json({error:'Merit certificates are for 1st, 2nd and 3rd place in an event.',code:'NO_MEDAL'});
+  const pdf=await meritCertificatePdf({fullName:r.full_name,schoolName:r.school_name,category:medal.category,event:medal.event,position:medal.position,registrationId:r.registration_id});
+  const slug=v=>String(v).replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  res.set('Content-Type','application/pdf');res.set('Content-Disposition',`attachment; filename="BSF-Merit-Certificate-${slug(r.full_name)||r.registration_id}-${slug(medal.event)}-${ordinal(medal.position)}.pdf"`);
+  res.send(pdf);
+});
 
 // Live timings: every saved time is public straight away; events not yet published from the Results desk are marked provisional.
 app.get('/api/public/timings',async(req,res)=>{
