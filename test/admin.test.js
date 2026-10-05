@@ -359,6 +359,11 @@ test('admin end-to-end API regression',async t=>{
    assert.deepEqual(['Q','R','P'].map(n=>[row(n).points,row(n).gold,row(n).silver,row(n).bronze]),[[5,1,0,0],[3,0,1,0],[2,0,0,1]]);
    assert.ok(row('Q').rank<row('R').rank&&row('R').rank<row('P').rank);assert.equal(row('S'),undefined,'DQ swimmer has no medal');
    assert.deepEqual(row('Q').medals,[{event:'50m Freestyle',position:1}]);assert.ok(!JSON.stringify(best).includes('registration_id'));
+   // Champion photo: only rank 1, through an unguessable link that serves the registration photo.
+   assert.match(row('Q').photo,/^\/api\/public\/champion-photo\/[0-9a-f]{32}$/);assert.equal(row('R').photo,undefined,'only champions show a photo');assert.ok(!row('Q').photo.includes(kids[1].registrationId));
+   const photo=await fetch(base+row('Q').photo);assert.equal(photo.status,200);assert.equal(photo.headers.get('content-type'),'image/png');assert.equal(await photo.text(),'photo bytes');
+   assert.equal((await fetch(base+'/api/public/champion-photo/'+'0'.repeat(32))).status,404);
+   process.env.PUBLIC_RESULTS='closed';try{assert.equal((await fetch(base+row('Q').photo)).status,404,'hidden with results')}finally{process.env.PUBLIC_RESULTS='open'}
    process.env.PUBLIC_RESULTS='closed';try{assert.deepEqual(await (await fetch(base+'/api/public/best-swimmers')).json(),{closed:true});assert.ok(Array.isArray((await api('/api/public/best-swimmers')).body),'admins still see it')}finally{process.env.PUBLIC_RESULTS='open'}}
   // Merit certificates: official podium Q 1st, R 2nd, P 3rd; S (DQ) none.
   const ticket=async kid=>(await (await fetch(base+'/api/ticket/'+kid.ticketToken)).json()).meritCertificates;

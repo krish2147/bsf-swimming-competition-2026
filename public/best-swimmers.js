@@ -16,7 +16,7 @@
     out.className='';out.innerHTML=shown.map(g=>{
       const champions=g.swimmers.filter(s=>s.rank===1);
       return `<section class="card live-event best-group"><div class="live-event-head"><div><h2>${esc(g.category)} • ${esc(g.gender)}</h2><p class="muted">${g.swimmers.length} medal winner(s)</p></div></div>
-      <div class="champion">${champions.map(s=>`<div class="champion-row"><span class="champion-trophy" aria-hidden="true">🏆</span><div><div class="eyebrow">Best Swimmer${champions.length>1?' (shared)':''}</div><b>${esc(s.full_name)}</b><div class="muted live-school">${esc(s.school_name)}</div><div class="champion-medals">${s.medals.map(m=>`${medal[m.position]} ${esc(m.event)}`).join(' · ')}</div></div><span class="live-time">${s.points} pts</span></div>`).join('')}</div>
+      <div class="champion">${champions.map(s=>`<div class="champion-row">${s.photo?`<span class="champion-photo-wrap"><img class="champion-photo" src="${esc(s.photo)}" alt="Photo of ${esc(s.full_name)}" loading="lazy"><span class="champion-badge" aria-hidden="true">🏆</span></span>`:'<span class="champion-trophy" aria-hidden="true">🏆</span>'}<div><div class="eyebrow">Best Swimmer${champions.length>1?' (shared)':''}</div><b>${esc(s.full_name)}</b><div class="muted live-school">${esc(s.school_name)}</div><div class="champion-medals">${s.medals.map(m=>`${medal[m.position]} ${esc(m.event)}`).join(' · ')}</div></div><span class="live-time">${s.points} pts</span></div>`).join('')}</div>
       <table class="live-table"><thead><tr><th>Rank</th><th>Swimmer</th><th>🥇</th><th>🥈</th><th>🥉</th><th>Pts</th></tr></thead><tbody>
       ${g.swimmers.map(s=>`<tr><td>${s.rank===1?'🏆':s.rank}</td><td>${esc(s.full_name)}<div class="muted live-school">${esc(s.school_name)}</div></td><td>${s.gold}</td><td>${s.silver}</td><td>${s.bronze}</td><td class="live-time">${s.points}</td></tr>`).join('')}
       </tbody></table></section>`}).join('');
@@ -30,6 +30,8 @@
     }catch{status.textContent='Could not refresh — retrying…'}
   }
   pick.addEventListener('change',render);
+  // A missing or broken photo falls back to the trophy.
+  out.addEventListener('error',e=>{const img=e.target;if(img?.matches?.('img.champion-photo')){img.parentNode.classList.add('no-photo');img.remove()}},true);
   load();setInterval(()=>{if(!document.hidden)load()},20000);
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)load()});
 })();
