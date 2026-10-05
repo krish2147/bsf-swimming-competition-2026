@@ -84,7 +84,7 @@ function registrationClosesAt(){
   const configured=new Date(process.env.REGISTRATION_CLOSES_AT||DEFAULT_REGISTRATION_CLOSES_AT);
   return Number.isNaN(configured.getTime())?new Date(DEFAULT_REGISTRATION_CLOSES_AT):configured;
 }
-// The competition is over: the public site shows a thank-you, live timings are closed and registration is closed for
+// The competition is over: the public site shows the certificates popup and registration is closed for
 // everyone (admins too), whatever REGISTRATION_CLOSES_AT says. Set TOURNAMENT=open to undo.
 const tournamentOpen=()=>String(process.env.TOURNAMENT||'').toLowerCase()==='open';
 const registrationOpen=()=>tournamentOpen()&&Date.now()<registrationClosesAt().getTime();
@@ -234,8 +234,9 @@ app.post('/api/ticket-recovery',async(req,res)=>{
 
 // Live results: per event, an overall ranking across all heats from saved times (provisional), and the official podium
 // once the event is published from the Results desk.
-// Public results are closed by the organisers; set PUBLIC_RESULTS=open in the environment to show them again.
-const publicResultsOpen=()=>String(process.env.PUBLIC_RESULTS||'').toLowerCase()==='open';
+// Public results and live timings are live; set PUBLIC_RESULTS=closed / PUBLIC_TIMINGS=closed in the environment to hide them.
+const publicResultsOpen=()=>String(process.env.PUBLIC_RESULTS||'').toLowerCase()!=='closed';
+const publicTimingsOpen=()=>String(process.env.PUBLIC_TIMINGS||'').toLowerCase()!=='closed';
 app.get('/api/public/results',async(req,res)=>{
   res.set('Cache-Control','no-store');
   if(!publicResultsOpen())return res.json({closed:true});
@@ -268,7 +269,7 @@ async function eventResults(){
 // Live timings: every saved time is public straight away; events not yet published from the Results desk are marked provisional.
 app.get('/api/public/timings',async(req,res)=>{
   res.set('Cache-Control','no-store');
-  if(!tournamentOpen())return res.json({closed:true});
+  if(!publicTimingsOpen())return res.json({closed:true});
   const rows=await q(`SELECT te.event_key,te.heat_no,te.timing_text,te.status,te.updated_at,r.full_name,r.school_name,re.lane_no,COALESCE(ep.published,FALSE) published
     FROM timing_entries te JOIN registrations r ON r.registration_id=te.registration_id
     LEFT JOIN race_entries re ON re.event_key=te.event_key AND re.registration_id=te.registration_id

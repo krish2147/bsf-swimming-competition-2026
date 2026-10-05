@@ -320,7 +320,9 @@ test('admin end-to-end API regression',async t=>{
    assert.equal(cfg.registrationOpen,false,'closed even though REGISTRATION_CLOSES_AT is in the future');assert.equal(cfg.lateEntry,false,'no admin late entry after the competition');
    const late=await fetch(base+'/api/register',{method:'POST',headers:{cookie},body:(()=>{const f=new FormData();for(const [k,v] of Object.entries({fullName:'After Close',schoolName:'S',gender:'Boys',dob:'2015-05-01',email:'parent@example.com',phone:'9988776600',events:JSON.stringify(['25m Freestyle']),idempotencyKey:crypto.randomUUID()}))f.set(k,v);f.set('participantPhoto',new Blob(['photo bytes'],{type:'image/png'}),'photo.png');f.set('paymentProof',new Blob(['proof bytes'],{type:'image/jpeg'}),'proof.jpg');return f})()});
    assert.equal(late.status,403,'admin cannot register through the public form after the competition: '+JSON.stringify(await late.clone().json()));
-   assert.deepEqual(await (await fetch(base+'/api/public/timings')).json(),{closed:true},'tournament closed: no public timings');assert.equal((await (await fetch(base+'/api/config')).json()).tournamentClosed,true)}finally{process.env.TOURNAMENT='open'}
+   assert.ok(Array.isArray(await (await fetch(base+'/api/public/timings')).json()),'timings stay live after the tournament closes');
+   process.env.PUBLIC_TIMINGS='closed';assert.deepEqual(await (await fetch(base+'/api/public/timings')).json(),{closed:true},'PUBLIC_TIMINGS=closed hides timings');delete process.env.PUBLIC_TIMINGS;
+   const savedResults=process.env.PUBLIC_RESULTS;delete process.env.PUBLIC_RESULTS;assert.ok(Array.isArray(await (await fetch(base+'/api/public/results')).json()),'results live by default');process.env.PUBLIC_RESULTS=savedResults;assert.equal((await (await fetch(base+'/api/config')).json()).tournamentClosed,true)}finally{process.env.TOURNAMENT='open'}
   assert.equal((await (await fetch(base+'/api/config')).json()).tournamentClosed,false);assert.ok(Array.isArray(await (await fetch(base+'/api/public/timings')).json()));
   process.env.PUBLIC_RESULTS='closed';
   try{
