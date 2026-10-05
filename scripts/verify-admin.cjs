@@ -293,20 +293,19 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    console.log('PASS public results closed: notice shown, pickers and standings hidden; admin-only preview shows medals');}
   {const ctx=await browser.newContext({viewport:{width:390,height:844}}),pg=await ctx.newPage(),errors=[];pg.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
    const prevClose=process.env.REGISTRATION_CLOSES_AT;process.env.TOURNAMENT='closed';process.env.PUBLIC_TIMINGS='closed';process.env.REGISTRATION_CLOSES_AT=new Date(Date.now()-1000).toISOString();
-   try{await pg.goto(base+'/');const dialog=pg.locator('dialog.registration-closed-dialog');await dialog.waitFor();assert.match(await dialog.textContent(),/Participation Certificates are Live!/);assert.match(await dialog.getByRole('link').textContent(),/Find My Ticket/);
-    assert.equal(await dialog.locator('a').getAttribute('href'),'/find-ticket.html');await pg.screenshot({path:path.join(artifacts,'tournament-closed-home.png')});
-    await dialog.getByRole('button',{name:'Close'}).click();await pg.waitForFunction(()=>document.querySelector('.registration-deadline').textContent.includes('competition has concluded'));
-    await pg.goto(base+'/timings.html');await pg.waitForFunction(()=>document.getElementById('out').textContent.includes('Live timings are closed'));
-    {const d=pg.locator('dialog.registration-closed-dialog');await d.waitFor();await Promise.all([pg.waitForURL(base+'/find-ticket.html'),d.getByRole('link').click()]);await pg.goBack();await pg.waitForFunction(()=>document.getElementById('out').textContent.includes('Live timings are closed'));const again=pg.locator('dialog.registration-closed-dialog');await again.waitFor();await again.getByRole('button',{name:'Close'}).click();}
+   try{const noPopup=async where=>{await pg.waitForTimeout(400);assert.equal(await pg.locator('dialog.registration-closed-dialog').count(),0,'no popup on '+where)};
+    await pg.goto(base+'/');await pg.waitForFunction(()=>document.querySelector('.registration-deadline').textContent.includes('competition has concluded'));await noPopup('home');
+    assert.equal(await pg.locator('.registration-deadline a').getAttribute('href'),'/find-ticket.html');await pg.screenshot({path:path.join(artifacts,'tournament-closed-home.png')});
+    await pg.goto(base+'/timings.html');await pg.waitForFunction(()=>document.getElementById('out').textContent.includes('Live timings are closed'));await noPopup('timings');
     assert.ok(!(await pg.locator('#timingSearch').isVisible()));assert.equal(await pg.locator('.live-event').count(),0);
     await pg.screenshot({path:path.join(artifacts,'tournament-closed-timings.png'),fullPage:true});assert.deepEqual(errors,[]);
-    // Logged in as admin, with REGISTRATION_CLOSES_AT pushed into the future: still closed, popup still shown.
+    // Logged in as admin, with REGISTRATION_CLOSES_AT pushed into the future: registration still closed, still no popup.
     process.env.REGISTRATION_CLOSES_AT='2100-01-02T00:00:00+05:30';
     await pg.goto(base+'/admin/');await pg.locator('#pin').fill('test-pin');await pg.getByRole('button',{name:'Enter',exact:true}).click();await pg.locator('#dash:not(.hidden)').waitFor();
-    for(const route of ['/','/register.html']){await pg.goto(base+route);const d=pg.locator('dialog.registration-closed-dialog');await d.waitFor();assert.match(await d.textContent(),/Participation Certificates are Live!/,route);await d.getByRole('button',{name:'Close'}).click()}
+    for(const route of ['/','/register.html']){await pg.goto(base+route);await pg.waitForFunction(()=>document.querySelector('.registration-deadline')?.textContent.includes('competition has concluded'));await noPopup(route)}
     assert.equal(await pg.locator('#form').isVisible(),false,'registration form hidden for admin after the competition');
    }finally{process.env.TOURNAMENT='open';delete process.env.PUBLIC_TIMINGS;process.env.REGISTRATION_CLOSES_AT=prevClose;await ctx.close()}
-   console.log('PASS tournament closed: thank-you popup + notice on home, live timings closed');}
+   console.log('PASS tournament closed: no popup, certificate notice on home/register, registration closed for admins, live timings can be closed');}
   const anon=await browser.newContext();const anonymousPage=await anon.newPage();for(const route of ['payments','timings','results','checkin']){await anonymousPage.goto(base+`/admin/${route}.html`);await anonymousPage.waitForURL(base+'/admin/');await anonymousPage.locator('#loginBox:not(.hidden)').waitFor()}await anon.close();console.log('PASS unauthenticated admin desks redirect to login');
   console.log('Screenshots: '+artifacts);
  }finally{if(browser)await browser.close();await close()}
