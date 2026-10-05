@@ -280,8 +280,8 @@ async function medalsByRegistration(){
   return medals;
 }
 // Best swimmers: individual champions per age group and gender, from the same medal placings as Results.
-// Points: 1st = 5, 2nd = 3, 3rd = 1; ties on points go to more golds, then more silvers; still level = shared rank.
-const MEDAL_POINTS={1:5,2:3,3:1};
+// Points: 1st = 5, 2nd = 3, 3rd = 2; ties on points go to more golds, then more silvers; still level = shared rank.
+const MEDAL_POINTS={1:5,2:3,3:2};
 async function bestSwimmers(){
   const medals=await medalsByRegistration();if(!medals.size)return [];
   const regs=await q('SELECT registration_id,full_name,school_name,age_category,gender FROM registrations WHERE registration_id=ANY($1)',[[...medals.keys()]]);

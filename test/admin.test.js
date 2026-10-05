@@ -353,10 +353,10 @@ test('admin end-to-end API regression',async t=>{
   e=await event();assert.equal(e.published,true);
   assert.deepEqual(e.official.map(p=>[p.position,p.full_name,p.timing_text]),[[1,'Results Swimmer Q','00:33.00'],[2,'Results Swimmer R','0:33:00'],[3,'Results Swimmer P','35.10s']]);
   assert.ok(!JSON.stringify(await (await fetch(base+'/api/public/results')).json()).includes('registration_id'),'no registration IDs in public results');
-  // Best swimmers: Under-14 Boys ranked by points (5/3/1) from the same placings.
+  // Best swimmers: Under-14 Boys ranked by points (5/3/2) from the same placings.
   {const best=await (await fetch(base+'/api/public/best-swimmers')).json(),g=best.find(x=>x.category==='Under-14'&&x.gender==='Boys');
    const row=n=>g.swimmers.find(x=>x.full_name==='Results Swimmer '+n);
-   assert.deepEqual(['Q','R','P'].map(n=>[row(n).points,row(n).gold,row(n).silver,row(n).bronze]),[[5,1,0,0],[3,0,1,0],[1,0,0,1]]);
+   assert.deepEqual(['Q','R','P'].map(n=>[row(n).points,row(n).gold,row(n).silver,row(n).bronze]),[[5,1,0,0],[3,0,1,0],[2,0,0,1]]);
    assert.ok(row('Q').rank<row('R').rank&&row('R').rank<row('P').rank);assert.equal(row('S'),undefined,'DQ swimmer has no medal');
    assert.deepEqual(row('Q').medals,[{event:'50m Freestyle',position:1}]);assert.ok(!JSON.stringify(best).includes('registration_id'));
    process.env.PUBLIC_RESULTS='closed';try{assert.deepEqual(await (await fetch(base+'/api/public/best-swimmers')).json(),{closed:true});assert.ok(Array.isArray((await api('/api/public/best-swimmers')).body),'admins still see it')}finally{process.env.PUBLIC_RESULTS='open'}}
