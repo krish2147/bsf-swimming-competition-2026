@@ -5,6 +5,7 @@ const multer=require('multer');
 const QRCode=require('qrcode');
 const {v4:uuidv4}=require('uuid');
 const path=require('path');
+const crypto=require('crypto');
 const {pool,initDb,withTransaction}=require('./src/db');
 const {CATEGORIES,categoryForDob,eventKey,parseEventKey}=require('./src/competition');
 
@@ -282,20 +283,32 @@ async function medalsByRegistration(){
 // Best swimmers: individual champions per age group and gender, from the same medal placings as Results.
 // Points: 1st = 5, 2nd = 3, 3rd = 2; ties on points go to more golds, then more silvers; still level = shared rank.
 const MEDAL_POINTS={1:5,2:3,3:2};
-async function bestSwimmers(){
+async function bestSwimmers({withIds=false}={}){
   const medals=await medalsByRegistration();if(!medals.size)return [];
-  const regs=await q('SELECT registration_id,full_name,school_name,age_category,gender FROM registrations WHERE registration_id=ANY($1)',[[...medals.keys()]]);
+  const regs=await q('SELECT registration_id,full_name,school_name,age_category,gender,(participant_photo IS NOT NULL AND length(participant_photo)>0) has_photo FROM registrations WHERE registration_id=ANY($1)',[[...medals.keys()]]);
   const groups=new Map(),order=new Map();let n=0;for(const c of CATEGORIES)for(const g of ['Boys','Girls'])order.set(`${c.name}|${g}`,n++);
   for(const r of regs){
     const list=medals.get(r.registration_id),count=p=>list.filter(m=>m.position===p).length;
-    const swimmer={full_name:r.full_name,school_name:r.school_name,gold:count(1),silver:count(2),bronze:count(3),points:list.reduce((t,m)=>t+(MEDAL_POINTS[m.position]||0),0),
+    const swimmer={registration_id:r.registration_id,has_photo:r.has_photo,full_name:r.full_name,school_name:r.school_name,gold:count(1),silver:count(2),bronze:count(3),points:list.reduce((t,m)=>t+(MEDAL_POINTS[m.position]||0),0),
       medals:list.map(m=>({event:m.event,position:m.position})).sort((a,b)=>a.position-b.position||a.event.localeCompare(b.event))};
     const key=`${r.age_category}|${r.gender}`;if(!groups.has(key))groups.set(key,{category:r.age_category,gender:r.gender,order:order.get(key)??9999,swimmers:[]});groups.get(key).swimmers.push(swimmer);
   }
   const cmp=(a,b)=>b.points-a.points||b.gold-a.gold||b.silver-a.silver;
   for(const g of groups.values()){g.swimmers.sort((a,b)=>cmp(a,b)||a.full_name.localeCompare(b.full_name));g.swimmers.forEach((s,i)=>{s.rank=i&&!cmp(s,g.swimmers[i-1])?g.swimmers[i-1].rank:i+1})}
+  // Champions (rank 1) show their registration photo through an unguessable link; nothing else about the photo is public.
+  for(const g of groups.values())for(const sw of g.swimmers){if(sw.rank===1&&sw.has_photo)sw.photo=`/api/public/champion-photo/${championPhotoRef(sw.registration_id)}`;delete sw.has_photo;if(!withIds)delete sw.registration_id}
   return [...groups.values()].sort((a,b)=>a.order-b.order);
 }
+const championPhotoRef=id=>crypto.createHmac('sha256',String(process.env.SESSION_SECRET||'bsf-champion-photo')).update('champion-photo:'+id).digest('hex').slice(0,32);
+app.get('/api/public/champion-photo/:ref',async(req,res)=>{
+  if(!publicResultsOpen()&&!req.session?.admin)return res.status(404).end();
+  const champ=(await bestSwimmers({withIds:true})).flatMap(g=>g.swimmers).find(s=>s.rank===1&&s.photo&&championPhotoRef(s.registration_id)===req.params.ref);
+  if(!champ)return res.status(404).end();
+  const r=(await q('SELECT participant_photo data,participant_photo_mime mime FROM registrations WHERE registration_id=$1',[champ.registration_id]))[0];
+  if(!r?.data?.length||typeof r.mime!=='string'||!/^image\/[a-z0-9.+-]+$/i.test(r.mime))return res.status(404).end();
+  res.set({'Cache-Control':'public, max-age=300','X-Content-Type-Options':'nosniff','Content-Security-Policy':"sandbox; default-src 'none'"});
+  res.type(r.mime).send(Buffer.from(r.data));
+});
 app.get('/api/public/best-swimmers',async(req,res)=>{
   res.set('Cache-Control','no-store');
   if(!publicResultsOpen()&&!req.session?.admin)return res.json({closed:true});
