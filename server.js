@@ -279,6 +279,28 @@ async function medalsByRegistration(){
   }
   return medals;
 }
+// Best swimmers: individual champions per age group and gender, from the same medal placings as Results.
+// Points: 1st = 5, 2nd = 3, 3rd = 1; ties on points go to more golds, then more silvers; still level = shared rank.
+const MEDAL_POINTS={1:5,2:3,3:1};
+async function bestSwimmers(){
+  const medals=await medalsByRegistration();if(!medals.size)return [];
+  const regs=await q('SELECT registration_id,full_name,school_name,age_category,gender FROM registrations WHERE registration_id=ANY($1)',[[...medals.keys()]]);
+  const groups=new Map(),order=new Map();let n=0;for(const c of CATEGORIES)for(const g of ['Boys','Girls'])order.set(`${c.name}|${g}`,n++);
+  for(const r of regs){
+    const list=medals.get(r.registration_id),count=p=>list.filter(m=>m.position===p).length;
+    const swimmer={full_name:r.full_name,school_name:r.school_name,gold:count(1),silver:count(2),bronze:count(3),points:list.reduce((t,m)=>t+(MEDAL_POINTS[m.position]||0),0),
+      medals:list.map(m=>({event:m.event,position:m.position})).sort((a,b)=>a.position-b.position||a.event.localeCompare(b.event))};
+    const key=`${r.age_category}|${r.gender}`;if(!groups.has(key))groups.set(key,{category:r.age_category,gender:r.gender,order:order.get(key)??9999,swimmers:[]});groups.get(key).swimmers.push(swimmer);
+  }
+  const cmp=(a,b)=>b.points-a.points||b.gold-a.gold||b.silver-a.silver;
+  for(const g of groups.values()){g.swimmers.sort((a,b)=>cmp(a,b)||a.full_name.localeCompare(b.full_name));g.swimmers.forEach((s,i)=>{s.rank=i&&!cmp(s,g.swimmers[i-1])?g.swimmers[i-1].rank:i+1})}
+  return [...groups.values()].sort((a,b)=>a.order-b.order);
+}
+app.get('/api/public/best-swimmers',async(req,res)=>{
+  res.set('Cache-Control','no-store');
+  if(!publicResultsOpen()&&!req.session?.admin)return res.json({closed:true});
+  res.json(await bestSwimmers());
+});
 // Merit certificates are offered only while results are public and certificates are available.
 const meritAvailable=()=>certificatesAvailable()&&publicResultsOpen();
 const meritList=(token,list=[])=>meritAvailable()?list.map(m=>({event:m.event,category:m.category,position:m.position,positionLabel:ordinal(m.position),url:`/api/merit-certificate/${encodeURIComponent(token)}?event=${encodeURIComponent(m.eventKey)}`})):[];

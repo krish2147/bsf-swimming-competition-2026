@@ -94,3 +94,4 @@ nav.co-branded-header .nav-cta{margin-left:0}
 .registration-closed-actions.stacked{flex-direction:column}
 .podium-row>div{min-width:0;overflow-wrap:anywhere}
 .btn.merit-certificate,.btn.merit-recovery{background:#c99a2e;color:#1b1405;border-color:#b0862a}.btn.merit-certificate:hover,.btn.merit-recovery:hover{background:#b0862a}
+.champion{margin:6px 0 18px}.champion-row{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid #e6c56a;background:linear-gradient(135deg,#fff8e1,#fdf1c7);border-radius:12px;margin-bottom:8px}.champion-row>div{flex:1;min-width:0;overflow-wrap:anywhere}.champion-trophy{font-size:34px;line-height:1}.champion-row b{font-size:18px}.champion-medals{font-size:13px;margin-top:4px;color:#5b4a14}.champion-row .eyebrow{color:#9a6b00;margin-bottom:2px}
