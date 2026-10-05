@@ -323,7 +323,13 @@ test('admin end-to-end API regression',async t=>{
    assert.deepEqual(await (await fetch(base+'/api/public/timings')).json(),{closed:true},'tournament closed: no public timings');assert.equal((await (await fetch(base+'/api/config')).json()).tournamentClosed,true)}finally{process.env.TOURNAMENT='open'}
   assert.equal((await (await fetch(base+'/api/config')).json()).tournamentClosed,false);assert.ok(Array.isArray(await (await fetch(base+'/api/public/timings')).json()));
   process.env.PUBLIC_RESULTS='closed';
-  try{assert.deepEqual(await (await fetch(base+'/api/public/results')).json(),{closed:true},'results closed: nothing public')}finally{process.env.PUBLIC_RESULTS='open'}
+  try{
+   assert.deepEqual(await (await fetch(base+'/api/public/results')).json(),{closed:true},'results closed: nothing public');
+   const preview=await api('/api/admin/results-preview');assert.equal(preview.status,200);assert.equal(preview.body.publicOpen,false);
+   assert.ok(preview.body.events.find(x=>x.event_key===key).awaiting.length===4,'admin preview shows the event while public is closed');
+   assert.equal((await api('/api/admin/results-preview',null,false)).status,401,'preview is admin only');
+  }finally{process.env.PUBLIC_RESULTS='open'}
+  assert.equal((await api('/api/admin/results-preview')).body.publicOpen,true);
   let e=await event();
   assert.deepEqual(e.awaiting.map(s=>s.full_name).sort(),kids.map((_,i)=>'Results Swimmer '+'PQRS'[i]),'whole heat list shown before any time');assert.ok(e.awaiting.every(s=>s.heat_no>=1&&s.lane_no>=1));assert.deepEqual(e.standings,[]);
   const times=[['35.10s','TIME'],['00:33.00','TIME'],['0:33:00','TIME'],['','DQ']];

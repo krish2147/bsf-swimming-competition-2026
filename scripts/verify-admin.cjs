@@ -276,8 +276,17 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    process.env.PUBLIC_RESULTS='closed';
    try{await pg.goto(base+'/results.html');await pg.waitForFunction(()=>document.getElementById('out').textContent.includes('Results are closed'));
     assert.ok(!(await pg.locator('.result-pickers').isVisible()),'pickers hidden');assert.equal(await pg.locator('.live-event').count(),0);assert.deepEqual(errors,[]);
-    await pg.screenshot({path:path.join(artifacts,'results-closed.png'),fullPage:true});}finally{process.env.PUBLIC_RESULTS='open';await ctx.close()}
-   console.log('PASS public results closed: notice shown, pickers and standings hidden');}
+    await pg.screenshot({path:path.join(artifacts,'results-closed.png'),fullPage:true});
+    // Admin-only preview while the public page is closed.
+    await pg.goto(base+'/admin/results-preview.html');await pg.waitForURL(base+'/admin/');
+    await pg.locator('#pin').fill('test-pin');await pg.getByRole('button',{name:'Enter',exact:true}).click();await pg.locator('#dash:not(.hidden)').waitFor();
+    await pg.getByRole('link',{name:'Results Preview'}).click();await pg.waitForURL(base+'/admin/results-preview.html');
+    await pg.waitForFunction(()=>document.getElementById('previewState').textContent.includes('CLOSED'));
+    await pg.locator('#pickCategory').selectOption('Under-12');await pg.locator('#pickGender').selectOption('Boys');
+    await pg.waitForFunction(()=>document.querySelector('#out .live-event .podium'));assert.ok((await pg.locator('#out .podium').textContent()).includes('🥇'));
+    assert.ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await pg.screenshot({path:path.join(artifacts,'admin-results-preview.png'),fullPage:true});
+    await pg.goto(base+'/results.html');await pg.waitForFunction(()=>document.getElementById('out').textContent.includes('Results are closed'));}finally{process.env.PUBLIC_RESULTS='open';await ctx.close()}
+   console.log('PASS public results closed: notice shown, pickers and standings hidden; admin-only preview shows medals');}
   {const ctx=await browser.newContext({viewport:{width:390,height:844}}),pg=await ctx.newPage(),errors=[];pg.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
    const prevClose=process.env.REGISTRATION_CLOSES_AT;process.env.TOURNAMENT='closed';process.env.REGISTRATION_CLOSES_AT=new Date(Date.now()-1000).toISOString();
    try{await pg.goto(base+'/');const dialog=pg.locator('dialog.registration-closed-dialog');await dialog.waitFor();assert.match(await dialog.textContent(),/Participation Certificates are Live!/);assert.match(await dialog.getByRole('link').textContent(),/Find My Ticket/);

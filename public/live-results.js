@@ -2,6 +2,7 @@
 // across all heats (fastest first, medals for the top three). "Live · provisional" until published, then the official podium.
 (()=>{
   const out=document.getElementById('out'),status=document.getElementById('liveStatus');
+  const endpoint=document.body.dataset.resultsEndpoint||'/api/public/results';
   const pick={category:document.getElementById('pickCategory'),gender:document.getElementById('pickGender'),event:document.getElementById('pickEvent')};
   const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const medal=p=>p===1?'🥇':p===2?'🥈':p===3?'🥉':'';
@@ -34,7 +35,9 @@
       </tbody></table></section>`;
   }
   async function load(){
-    try{const response=await fetch('/api/public/results',{cache:'no-store'});if(!response.ok)throw Error();const json=await response.json();
+    try{const response=await fetch(endpoint,{cache:'no-store'});if(response.status===401){location.assign('/admin/');return}if(!response.ok)throw Error();let json=await response.json();
+      // Admin preview: {publicOpen, events} — always shows the results, and says whether the public can see them yet.
+      if(json&&Array.isArray(json.events)){const note=document.getElementById('previewState');if(note)note.textContent=json.publicOpen?'The public Results page is OPEN — everyone can see these results.':'The public Results page is CLOSED — only admins can see this preview.';json=json.events}
       if(json&&json.closed){for(const el of document.querySelectorAll('.result-pickers,.live-badge,#resultsIntro'))el.classList.add('hidden');out.className='notice';out.textContent='Results are closed. Please check with the organisers at the venue.';status.textContent='';return}
       for(const el of document.querySelectorAll('.result-pickers,.live-badge,#resultsIntro'))el.classList.remove('hidden');data=json;syncPickers();render();
       status.textContent='Updated '+new Date().toLocaleTimeString('en-IN',{timeZone:'Asia/Kolkata',hour:'2-digit',minute:'2-digit',second:'2-digit'})+' · refreshes automatically';
