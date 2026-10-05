@@ -29,6 +29,29 @@ const load=()=>assets||=({
 const fitSize=(font,text,width,max,min)=>{for(let size=max;size>min;size-=0.5)if(font.widthOfTextAtSize(text,size)<=width)return size;return min};
 const joinEvents=list=>list.length<2?list.join(''):`${list.slice(0,-1).join(', ')} & ${list.at(-1)}`;
 
+// How a value sits on a blank line: one line at the largest size that fits, otherwise two smaller lines split at
+// the most natural point (" / ", ", ", " & ", then a space) — both placed just above the blank, never below it.
+// Returns [{text, size, rise}] where rise is the height above the blank line in points.
+function layoutLines(font,text,line,gap=5){
+  text=String(text??'').replace(/\s+/g,' ').trim();if(!text)return [];
+  const width=line.x1-line.x0-6,fits=size=>font.widthOfTextAtSize(text,size)<=width;
+  if(fits(line.min))return [{text,size:fitSize(font,text,width,line.max,line.min),rise:gap}];
+  // Split between events first (", " / " & "), then at " / ", then at any space — whichever gives the most even lines.
+  const split=(i,sep)=>{const keep=sep.trim();return [(text.slice(0,i)+(keep&&keep!=='&'?' '+keep:'')).trim(),((keep==='&'?'& ':'')+text.slice(i+sep.length)).trim()]};
+  let best=null;
+  for(const seps of [[', ',' & '],[' / '],[' ']]){
+    for(const sep of seps)for(let i=text.indexOf(sep);i>0;i=text.indexOf(sep,i+1)){
+      const parts=split(i,sep),widest=Math.max(...parts.map(t=>font.widthOfTextAtSize(t,10)));
+      if(!best||widest<best.widest)best={parts,widest};
+    }
+    if(best)break;
+  }
+  if(!best)return [{text,size:fitSize(font,text,width,line.min,4),rise:gap}];
+  const [first,second]=best.parts;
+  const size=Math.min(fitSize(font,first,width,Math.min(line.max,11),5),fitSize(font,second,width,Math.min(line.max,11),5));
+  return [{text:first,size,rise:gap+size+1},{text:second,size,rise:gap}];
+}
+
 const ordinal=n=>({1:'1st',2:'2nd',3:'3rd'})[n]||`${n}th`;
 
 async function certificatePdf(p){return fill(load().template,p,'Participation')}
@@ -39,28 +62,21 @@ async function fill(template,p,kind,position){
   const doc=await PDFDocument.load(template);doc.registerFontkit(fontkit);
   const nameFont=await doc.embedFont(nameBytes,{subset:false}),textFont=await doc.embedFont(textBytes,{subset:false});
   const page=doc.getPage(0),H=page.getHeight();
-  const write=(text,line,font,{gap=5,y=line.y}={})=>{
-    text=String(text??'').replace(/\s+/g,' ').trim();if(!text)return;
-    const width=line.x1-line.x0-6,size=fitSize(font,text,width,line.max,line.min);
-    const w=font.widthOfTextAtSize(text,size);
-    page.drawText(text,{x:line.x0+(line.x1-line.x0-w)/2,y:H-y+gap,size,font,color:NAVY,maxWidth:line.x1-line.x0});
+  const write=(text,line,font,{gap=5}={})=>{
+    for(const l of layoutLines(font,text,line,gap)){
+      const w=font.widthOfTextAtSize(l.text,l.size);
+      page.drawText(l.text,{x:line.x0+(line.x1-line.x0-w)/2,y:H-line.y+l.rise,size:l.size,font,color:NAVY});
+    }
   };
   write(p.fullName,LINES.name,nameFont,{gap:7});
   write(p.schoolName,LINES.school,textFont);
   write(p.category,LINES.ageGroup,textFont);
   if(position)write(position,LINES.position,textFont);
-  // Events: one line if it fits, otherwise split over two lines that sit just above the blank.
-  const events=(p.events||[]).filter(Boolean),one=joinEvents(events),line=LINES.event,width=line.x1-line.x0-6;
-  if(events.length<2||textFont.widthOfTextAtSize(one,line.min+1)<=width)write(one,line,textFont);
-  else{
-    const half=Math.ceil(events.length/2),first=events.slice(0,half).join(', ')+',',second=joinEvents(events.slice(half));
-    const size=Math.min(fitSize(textFont,first,width,11,6.5),fitSize(textFont,second,width,11,6.5));
-    write(first,{...line,max:size,min:size},textFont,{gap:5+size+1});
-    write(second,{...line,max:size,min:size},textFont);
-  }
+  // Events: one line if it fits, otherwise two lines just above the blank (see layoutLines).
+  write(joinEvents((p.events||[]).filter(Boolean)),LINES.event,textFont);
   doc.setTitle(`Certificate of ${kind} — ${p.fullName}`);doc.setAuthor('Baroda Swim Front');
   if(p.registrationId)doc.setSubject(`Registration ID ${p.registrationId}`);
   return Buffer.from(await doc.save({useObjectStreams:false}));
 }
 
-module.exports={certificatePdf,meritCertificatePdf,ordinal};
+module.exports={certificatePdf,meritCertificatePdf,ordinal,layoutLines,LINES,load};
