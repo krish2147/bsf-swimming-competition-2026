@@ -358,7 +358,7 @@ test('admin end-to-end API regression',async t=>{
    const row=n=>g.swimmers.find(x=>x.full_name==='Results Swimmer '+n);
    assert.deepEqual(['Q','R','P'].map(n=>[row(n).points,row(n).gold,row(n).silver,row(n).bronze]),[[5,1,0,0],[3,0,1,0],[2,0,0,1]]);
    assert.ok(row('Q').rank<row('R').rank&&row('R').rank<row('P').rank);assert.equal(row('S'),undefined,'DQ swimmer has no medal');
-   assert.deepEqual(row('Q').medals,[{event:'50m Freestyle',position:1}]);assert.ok(!JSON.stringify(best).includes('registration_id'));
+   assert.deepEqual(row('Q').medals,[{event:'50m Freestyle',position:1,time:'00:33.00'}]);assert.ok(!JSON.stringify(best).includes('registration_id'));
    // Champion photo: only rank 1, through an unguessable link that serves the registration photo.
    assert.match(row('Q').photo,/^\/api\/public\/champion-photo\/[0-9a-f]{32}$/);assert.equal(row('R').photo,undefined,'only champions show a photo');assert.ok(!row('Q').photo.includes(kids[1].registrationId));
    const photo=await fetch(base+row('Q').photo);assert.equal(photo.status,200);assert.equal(photo.headers.get('content-type'),'image/png');assert.equal(await photo.text(),'photo bytes');
