@@ -243,8 +243,13 @@ test('admin end-to-end API regression',async t=>{
    assert.match(pdf.headers.get('content-disposition'),/filename="BSF-Participation-Certificate-Certificate-Swimmer\.pdf"/);
    const bytes=Buffer.from(await pdf.arrayBuffer());assert.equal(bytes.subarray(0,5).toString(),'%PDF-');assert.equal((bytes.toString('latin1').match(/\/Type \/Page\b/g)||[]).length,1);
    assert.equal((await (await fetch(base+'/api/ticket/'+kid.ticketToken)).json()).certificateAvailable,true);
+   // One participation certificate per event entered.
+   const per=(await (await fetch(base+'/api/ticket/'+kid.ticketToken)).json()).participationCertificates;
+   assert.deepEqual(per.map(c=>c.event),['25m Freestyle','25m Backstroke']);assert.equal(per[0].url,'/api/certificate/'+kid.ticketToken+'?event=25m%20Freestyle');
+   const one=await fetch(base+per[1].url);assert.equal(one.status,200);assert.match(one.headers.get('content-disposition'),/filename="BSF-Participation-Certificate-Certificate-Swimmer-25m-Backstroke\.pdf"/);
+   assert.equal((await fetch(base+'/api/certificate/'+kid.ticketToken+'?event=50m%20Butterfly')).status,404,'only events the swimmer entered');
    const found=await (await fetch(base+'/api/ticket-recovery',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:'9876500011',dob:'2015-05-01'})})).json();
-   const match=found.matches.find(m=>m.registrationId===kid.registrationId);assert.equal(match.certificateAvailable,true);assert.equal(match.certificateUrl,'/api/certificate/'+kid.ticketToken);
+   const match=found.matches.find(m=>m.registrationId===kid.registrationId);assert.equal(match.certificateAvailable,true);assert.equal(match.participationCertificates.length,2);assert.equal(match.certificateUrl,'/api/certificate/'+kid.ticketToken);
    assert.equal((await fetch(base+'/api/certificate/not-a-real-token')).status,404);
   }finally{if(previous===undefined)delete process.env.CERTIFICATES_FROM;else process.env.CERTIFICATES_FROM=previous}
  });

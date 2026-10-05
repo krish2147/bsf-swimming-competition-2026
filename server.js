@@ -190,22 +190,28 @@ app.get('/api/ticket/:token',async(req,res)=>{
   const r=(await q('SELECT registration_id,ticket_token,full_name,school_name,age_category,gender,events_json,amount,payment_status FROM registrations WHERE ticket_token=$1',[req.params.token]))[0];
   if(!r)return res.status(404).json({error:'Ticket not found'});
   const scanUrl=`${BASE_URL}/admin/checkin.html?token=${encodeURIComponent(r.ticket_token)}`;
-  res.json({registrationId:r.registration_id,fullName:r.full_name,schoolName:r.school_name,category:r.age_category,gender:r.gender,events:registrationEvents(r.events_json),amount:r.amount,paymentStatus:r.payment_status,requiresFloaters:requiresFloaters(CATEGORIES.find(c=>c.name===r.age_category),registrationEvents(r.events_json)),eventLabels:CATEGORIES.find(c=>c.name===r.age_category)?.eventLabels||{},competitionDate:'4 October 2026',registrationDeadline:'1 October 2026',venue:'Vadodara, Gujarat',checkinUrl:scanUrl,...certificateInfo(r.ticket_token),meritCertificates:meritList(r.ticket_token,meritAvailable()?(await medalsByRegistration()).get(r.registration_id):[]),qrDataUrl:await QRCode.toDataURL(scanUrl,{margin:4,width:720}),token:r.ticket_token});
+  res.json({registrationId:r.registration_id,fullName:r.full_name,schoolName:r.school_name,category:r.age_category,gender:r.gender,events:registrationEvents(r.events_json),amount:r.amount,paymentStatus:r.payment_status,requiresFloaters:requiresFloaters(CATEGORIES.find(c=>c.name===r.age_category),registrationEvents(r.events_json)),eventLabels:CATEGORIES.find(c=>c.name===r.age_category)?.eventLabels||{},competitionDate:'4 October 2026',registrationDeadline:'1 October 2026',venue:'Vadodara, Gujarat',checkinUrl:scanUrl,...certificateInfo(r.ticket_token,registrationEvents(r.events_json),eventLabelsFor(r.age_category)),meritCertificates:meritList(r.ticket_token,meritAvailable()?(await medalsByRegistration()).get(r.registration_id):[]),qrDataUrl:await QRCode.toDataURL(scanUrl,{margin:4,width:720}),token:r.ticket_token});
 });
 
 // Participation certificates: downloadable with the ticket link from competition day (CERTIFICATES_FROM overrides, ISO date-time).
 const DEFAULT_CERTIFICATES_FROM='2026-10-04T00:00:00+05:30';
 function certificatesFrom(){const d=new Date(process.env.CERTIFICATES_FROM||DEFAULT_CERTIFICATES_FROM);return Number.isNaN(d.getTime())?new Date(DEFAULT_CERTIFICATES_FROM):d}
 const certificatesAvailable=()=>Date.now()>=certificatesFrom().getTime();
-const certificateInfo=token=>({certificateUrl:`/api/certificate/${encodeURIComponent(token)}`,certificateAvailable:certificatesAvailable(),certificateAvailableFrom:certificatesFrom().toISOString()});
+// One participation certificate per event the swimmer entered (?event=<event>); certificateUrl stays the swimmer's link.
+const certificateInfo=(token,events=[],labels={})=>{const base=`/api/certificate/${encodeURIComponent(token)}`;return {certificateUrl:base,certificateAvailable:certificatesAvailable(),certificateAvailableFrom:certificatesFrom().toISOString(),
+  participationCertificates:events.map(e=>({event:labels[e]||e,url:`${base}?event=${encodeURIComponent(e)}`}))}};
+const eventLabelsFor=category=>CATEGORIES.find(c=>c.name===category)?.eventLabels||{};
 app.get('/api/certificate/:token',async(req,res)=>{
   res.set('Cache-Control','no-store');
   const r=(await q('SELECT registration_id,full_name,school_name,age_category,gender,events_json FROM registrations WHERE ticket_token=$1',[req.params.token]))[0];
   if(!r)return res.status(404).json({error:'Certificate not found. Please use the link from your ticket.'});
   if(!certificatesAvailable())return res.status(403).json({error:'Participation certificates can be downloaded from 4 October 2026, the day of the competition.',code:'CERTIFICATE_NOT_YET_AVAILABLE',availableFrom:certificatesFrom().toISOString()});
-  const labels=CATEGORIES.find(c=>c.name===r.age_category)?.eventLabels||{};
-  const pdf=await certificatePdf({fullName:r.full_name,schoolName:r.school_name,category:r.age_category,gender:r.gender,events:registrationEvents(r.events_json).map(e=>labels[e]||e),registrationId:r.registration_id});
-  const file=`BSF-Participation-Certificate-${String(r.full_name).replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'')||r.registration_id}.pdf`;
+  const labels=eventLabelsFor(r.age_category),entered=registrationEvents(r.events_json),slug=v=>String(v).replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  // ?event=<event>: the certificate for that one event; without it, one event's certificate (or all events, for old links).
+  const chosen=req.query.event?[String(req.query.event)]:entered;
+  if(req.query.event&&!entered.includes(chosen[0]))return res.status(404).json({error:'This swimmer did not enter that event.',code:'EVENT_NOT_ENTERED'});
+  const pdf=await certificatePdf({fullName:r.full_name,schoolName:r.school_name,category:r.age_category,gender:r.gender,events:chosen.map(e=>labels[e]||e),registrationId:r.registration_id});
+  const file=`BSF-Participation-Certificate-${slug(r.full_name)||r.registration_id}${chosen.length===1&&req.query.event?'-'+slug(labels[chosen[0]]||chosen[0]):''}.pdf`;
   res.set('Content-Type','application/pdf');res.set('Content-Disposition',`attachment; filename="${file}"`);
   res.send(pdf);
 });
@@ -217,14 +223,14 @@ app.post('/api/ticket-recovery',async(req,res)=>{
     const digits=value=>String(value||'').replace(/\D/g,'');
     const normalizePhone=value=>{const d=digits(value);return d.length>10?d.slice(-10):d};
     if(normalizePhone(phone).length!==10||!/^\d{4}-\d{2}-\d{2}$/.test(dob))return res.status(400).json({error:'Enter the registered 10-digit phone number and participant date of birth.'});
-    const rows=await q('SELECT registration_id,ticket_token,full_name,school_name,phone FROM registrations WHERE dob=$1 ORDER BY created_at DESC',[dob]);
+    const rows=await q('SELECT registration_id,ticket_token,full_name,school_name,phone,age_category,events_json FROM registrations WHERE dob=$1 ORDER BY created_at DESC',[dob]);
     const medals=meritAvailable()?await medalsByRegistration():new Map();
     const matches=rows.filter(r=>normalizePhone(r.phone)===normalizePhone(phone)).slice(0,5).map(r=>({
       registrationId:r.registration_id,
       fullName:r.full_name,
       schoolName:r.school_name,
       ticketUrl:`/success.html?token=${encodeURIComponent(r.ticket_token)}`,
-      ...certificateInfo(r.ticket_token),
+      ...certificateInfo(r.ticket_token,registrationEvents(r.events_json),eventLabelsFor(r.age_category)),
       meritCertificates:meritList(r.ticket_token,medals.get(r.registration_id))
     }));
     if(!matches.length)return res.status(404).json({error:'No registration matched those details. Check the phone number and participant date of birth.'});
