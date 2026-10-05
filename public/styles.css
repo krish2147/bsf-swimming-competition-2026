@@ -99,3 +99,31 @@ nav.co-branded-header .nav-cta{margin-left:0}
 .champion-photo-wrap{position:relative;flex:0 0 auto;align-self:center}.champion-photo{display:block;width:110px;height:auto;max-height:150px;object-fit:contain;border-radius:10px;border:3px solid #f5b31b;background:#fff;box-shadow:0 4px 14px #9a6b0033}.champion-badge{position:absolute;right:-8px;bottom:-6px;font-size:28px;line-height:1;filter:drop-shadow(0 2px 3px #0003)}.champion-photo-wrap.no-photo::before{content:'🏆';font-size:44px;display:block;padding:0 10px}.champion-photo-wrap.no-photo .champion-badge{display:none}
 @media(max-width:420px){.champion-photo{width:84px;max-height:120px}}
 .champion-dialog{border:0;border-radius:16px;padding:0;width:min(460px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto;color:var(--text);background:#fff;box-shadow:0 20px 60px #06325066}.champion-dialog::backdrop{background:#041a2ecc}.champion-dialog-body{position:relative;padding:22px 20px 18px;text-align:center}.champion-close{position:absolute;top:10px;right:10px;padding:4px 12px;font-size:22px;line-height:1}.champion-dialog-photo{display:block;max-width:100%;max-height:52vh;width:auto;height:auto;margin:6px auto 14px;object-fit:contain;border-radius:12px;border:3px solid #f5b31b;background:#fff}.champion-dialog-trophy{font-size:72px;line-height:1;margin:8px 0 12px}.champion-dialog h2{margin:6px 0 2px}.champion-dialog .eyebrow{color:#9a6b00}.champion-dialog table{text-align:left;margin-top:10px}.champion-points{margin:12px 0 0;color:#5b4a14}
+@font-face{font-family:'BSF Anton';src:url(/fonts/anton-latin-400-normal.woff2) format('woff2');font-display:swap}
+@font-face{font-family:'BSF Barlow';font-weight:500;src:url(/fonts/barlow-condensed-latin-500-normal.woff2) format('woff2');font-display:swap}
+@font-face{font-family:'BSF Barlow';font-weight:700;src:url(/fonts/barlow-condensed-latin-700-normal.woff2) format('woff2');font-display:swap}
+/* Champion "Congratulations" card (Best Swimmers) */
+.champion-dialog{width:min(460px,calc(100vw - 20px));background:transparent;box-shadow:none;border-radius:20px}
+.congrats-card{container-type:inline-size;position:relative;overflow:hidden;border-radius:20px;color:#fff;text-align:center;padding:18px 18px 16px;font-family:'BSF Barlow','Arial Narrow',sans-serif;background:radial-gradient(120% 70% at 50% 18%,#3fd0ef 0,#14a6d6 32%,#0b78ad 62%,#07476d 85%,#062f4a 100%);box-shadow:0 24px 60px #02142699}
+.congrats-close{position:absolute;top:10px;right:10px;z-index:5;width:38px;height:38px;padding:0;border-radius:50%;background:#ffffff26;border:1px solid #ffffff55;color:#fff;font-size:24px;line-height:1}
+.congrats-close:hover{background:#ffffff40}
+.congrats-brand{position:absolute;top:14px;left:16px;z-index:3;display:flex;align-items:center;gap:8px;text-align:left;font:700 11px/1.15 'BSF Barlow',sans-serif;letter-spacing:.08em;text-transform:uppercase}
+.congrats-brand img{width:34px;height:34px;border-radius:8px;object-fit:cover;background:#fff}
+.congrats-hero{position:relative;margin:44px 0 0;min-height:250px;display:flex;justify-content:center;align-items:flex-end}
+.congrats-word{position:absolute;left:-6px;right:-6px;top:0;display:flex;flex-direction:column;align-items:center;line-height:.86;pointer-events:none}
+.congrats-word span{font:400 15.6cqw/.86 'BSF Anton',Impact,sans-serif;letter-spacing:-.01em;white-space:nowrap;color:#fff}
+.congrats-word span:nth-child(2){opacity:.38;-webkit-mask-image:linear-gradient(#000,transparent 85%);mask-image:linear-gradient(#000,transparent 85%)}
+.congrats-word span:nth-child(3){opacity:.16;-webkit-mask-image:linear-gradient(#000,transparent 70%);mask-image:linear-gradient(#000,transparent 70%)}
+.congrats-photo{position:relative;z-index:2;border:0;background:transparent;display:block;width:auto;height:auto;max-width:72%;max-height:250px;margin:0 auto;object-fit:contain;border-radius:14px;-webkit-mask-image:linear-gradient(#000 78%,transparent 100%);mask-image:linear-gradient(#000 78%,transparent 100%);filter:drop-shadow(0 10px 22px #0006)}
+div.congrats-photo{font-size:110px;line-height:1.4;-webkit-mask-image:none;mask-image:none}
+.congrats-trophy{position:absolute;z-index:3;right:7%;bottom:0;font-size:68px;line-height:1;filter:drop-shadow(0 6px 10px #0005);transform:rotate(-8deg)}
+.confetti{position:absolute;z-index:1;width:46px;height:12px;border-radius:3px;background:linear-gradient(90deg,#ffe07a,#f5b31b);opacity:.85}
+.confetti.c1{top:120px;left:-10px;transform:rotate(-18deg);filter:blur(2px)}.confetti.c2{top:70px;right:40px;width:22px;transform:rotate(30deg)}.confetti.c3{top:250px;right:-8px;transform:rotate(52deg);filter:blur(1.5px)}.confetti.c4{top:200px;left:30px;width:18px;height:8px;transform:rotate(-40deg)}
+.congrats-name{margin:12px 0 0;font:700 9.4cqw/1.02 'BSF Barlow',sans-serif;letter-spacing:.04em;text-transform:uppercase;color:#ffa51f;text-shadow:0 2px 0 #0003;overflow-wrap:anywhere}
+.congrats-title{font:700 5.2cqw/1.15 'BSF Barlow',sans-serif;letter-spacing:.06em;text-transform:uppercase;margin-top:4px}
+.congrats-text{margin:12px 4px 10px;font:500 17px/1.38 'BSF Barlow',sans-serif;color:#eaf7ff}
+.congrats-text b{color:#fff;font-weight:700}
+.congrats-times{list-style:none;margin:0;padding:0;display:grid;gap:6px;font:500 17px 'BSF Barlow',sans-serif}.congrats-times li{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;text-align:left;background:#ffffff1f;border-radius:9px;padding:8px 12px}.congrats-times b{color:#ffd46b;font-weight:700;font-size:19px}
+.congrats-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #ffffff4d}
+.congrats-logos{display:flex;gap:8px}.congrats-logos span{display:grid;place-items:center;height:46px;padding:4px 6px;border-radius:10px;background:#fff}.congrats-logos img{height:38px;width:auto;display:block;border-radius:6px}
+.congrats-where{font:500 13px/1.3 'BSF Barlow',sans-serif;text-align:right;color:#dff3ff}
