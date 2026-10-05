@@ -27,3 +27,20 @@ test('merit certificate is the signed merit design with position, event and age 
   assert.equal(doc.getPageCount(),1);assert.equal(doc.getTitle(),'Certificate of Merit — Kalp Shah');
   const {width,height}=doc.getPage(0).getSize();assert.equal(Math.round(width),595);assert.equal(Math.round(height),842);
 });
+
+test('every event label, long names and long schools stay on or above their blank line and fit its width',async()=>{
+  const {layoutLines,LINES,load}=require('../src/certificate'),{CATEGORIES}=require('../src/competition');
+  const doc=await PDFDocument.create();doc.registerFontkit(fontkit);
+  const text=await doc.embedFont(load().textFont),name=await doc.embedFont(load().nameFont);
+  const labels=new Set();for(const c of CATEGORIES)for(const e of c.events)labels.add((c.eventLabels||{})[e]||e);
+  const cases=[...[...labels].map(l=>[l,LINES.event,text]),['25m Freestyle Kick with Board / Floaters & 25m Freestyle',LINES.event,text],
+    ['Shree Narayan Vidyalaya English Medium Higher Secondary School, Vadodara',LINES.school,text],['Abdullah Parvezahmed Shaikh Mohammed Rafiq Khan',LINES.name,name]];
+  for(const [value,line,font] of cases){
+    const lines=layoutLines(font,value,line);
+    assert.ok(lines.length>=1&&lines.length<=2,value);
+    for(const l of lines){assert.ok(l.rise>=5,`${value}: "${l.text}" sits below the blank`);assert.ok(font.widthOfTextAtSize(l.text,l.size)<=line.x1-line.x0,`${value}: "${l.text}" too wide`);assert.ok(l.size>=5,value)}
+    assert.equal(lines.map(l=>l.text).join(' ').replace(/\s+/g,' ').replace(/ ,/g,','),value.replace(/\s+/g,' '),'no words lost');
+  }
+  assert.deepEqual(layoutLines(text,'25m Freestyle Kick with Board / Floaters',LINES.event).map(l=>l.text),['25m Freestyle Kick with Board /','Floaters']);
+  assert.deepEqual(layoutLines(text,'25m Freestyle Kick with Board / Floaters & 25-meter Freestyle with/without Floaters',LINES.event).map(l=>l.text),['25m Freestyle Kick with Board / Floaters','& 25-meter Freestyle with/without Floaters'],'two events split between the events');
+});
