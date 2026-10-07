@@ -315,6 +315,18 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
     assert.equal(await pg.locator('#form').isVisible(),false,'registration form hidden for admin after the competition');
    }finally{process.env.TOURNAMENT='open';delete process.env.PUBLIC_TIMINGS;process.env.REGISTRATION_CLOSES_AT=prevClose;await ctx.close()}
    console.log('PASS tournament closed: no popup, certificate notice on home/register, registration closed for admins, live timings can be closed');}
+  // Events page: every Baroda Swim Front event in one place (phone and desktop).
+  for(const [label,viewport] of [['mobile',{width:390,height:844}],['desktop',{width:1280,height:900}]]){
+   const ctx=await browser.newContext({viewport}),pg=await ctx.newPage(),errors=[];pg.on('pageerror',e=>errors.push(e.message));pg.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
+   await pg.goto(base+'/');await pg.locator('#siteNavLinks a[href="/events.html"]').first().waitFor({state:'attached'});
+   await pg.goto(base+'/events.html');const card=pg.locator('#pastEvents .event-card').first();await card.waitFor();
+   assert.match(await card.textContent(),/3rd Inter-School Swimming Competition 2026/);assert.match(await card.textContent(),/Our first event/);assert.match(await card.textContent(),/Completed/);
+   for(const href of ['/results.html','/best-swimmers.html','/timings.html','/find-ticket.html'])assert.equal(await card.locator(`a[href="${href}"]`).count(),1,href);
+   assert.match(await pg.locator('#upcomingEvents').textContent(),/coming soon/);assert.equal(await pg.locator('#upcomingEvents a[href^="https://chat.whatsapp.com/"]').count(),1);
+   assert.ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));assert.deepEqual(errors,[]);
+   await pg.screenshot({path:path.join(artifacts,`events-${label}.png`),fullPage:true});await ctx.close();
+  }
+  console.log('PASS events page: Baroda Swim Front events with links, upcoming placeholder, nav link, phone + desktop');
   const anon=await browser.newContext();const anonymousPage=await anon.newPage();for(const route of ['payments','timings','results','checkin']){await anonymousPage.goto(base+`/admin/${route}.html`);await anonymousPage.waitForURL(base+'/admin/');await anonymousPage.locator('#loginBox:not(.hidden)').waitFor()}await anon.close();console.log('PASS unauthenticated admin desks redirect to login');
   console.log('Screenshots: '+artifacts);
  }finally{if(browser)await browser.close();await close()}

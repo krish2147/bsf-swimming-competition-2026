@@ -127,3 +127,13 @@ div.congrats-photo{font-size:110px;line-height:1.4;-webkit-mask-image:none;mask-
 .congrats-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid #ffffff4d}
 .congrats-logos{display:flex;gap:8px}.congrats-logos span{display:grid;place-items:center;height:46px;padding:4px 6px;border-radius:10px;background:#fff}.congrats-logos img{height:38px;width:auto;display:block;border-radius:6px}
 .congrats-where{font:500 13px/1.3 'BSF Barlow',sans-serif;text-align:right;color:#dff3ff}
+/* Events page */
+.events-hero{display:flex;align-items:center;gap:22px;margin-bottom:10px}.events-hero-logo{width:96px;height:96px;border-radius:20px;object-fit:cover;box-shadow:0 6px 20px #0b2a4a22;flex:0 0 auto}.events-hero h1{margin-bottom:8px}
+.events-heading{font-size:22px;margin:30px 0 4px}
+.event-card{display:flex;gap:22px;align-items:flex-start}.event-body{flex:1;min-width:0}.event-body h3{font-size:24px;margin:8px 0 4px}.event-partner{margin:0 0 8px}.event-meta{font-weight:650;margin-bottom:10px}
+.event-date{flex:0 0 84px;text-align:center;border-radius:14px;padding:10px 6px;background:linear-gradient(160deg,#1268d3,#0b2a4a);color:#fff;box-shadow:0 6px 18px #1268d333}.event-date b{display:block;font-size:34px;line-height:1}.event-date span{display:block;font-weight:800;letter-spacing:.12em;text-transform:uppercase;font-size:14px;margin-top:4px}.event-date small{display:block;opacity:.8;font-size:12px}
+.event-tags{display:flex;gap:8px;flex-wrap:wrap}.event-badge{background:#fff4d6;border-color:#f5c451;color:#8a5a00}.event-done{background:#e8f6ef;border-color:#a8dcc2;color:#17794f}.event-soon{background:#e8f1fd;border-color:#b7d1f5;color:#1268d3}
+.event-links{display:flex;flex-wrap:wrap;gap:10px;margin:6px 0 4px}.event-links .btn{padding:10px 16px}
+.event-logos{display:flex;gap:10px;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}.event-logos img{height:40px;width:auto;border-radius:8px}
+.event-empty{display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between}
+@media(max-width:560px){.event-card{flex-direction:column;gap:12px}.event-date{flex-basis:auto;display:flex;align-items:baseline;gap:8px;padding:8px 14px}.event-date b{font-size:24px}.event-date span{margin:0}.events-hero{flex-direction:column;align-items:flex-start;gap:12px}.events-hero-logo{width:72px;height:72px}.event-links .btn{flex:1 1 calc(50% - 10px)}}
