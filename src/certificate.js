@@ -61,7 +61,15 @@ async function fill(template,p,kind,position){
   const {nameFont:nameBytes,textFont:textBytes}=load();
   const doc=await PDFDocument.load(template);doc.registerFontkit(fontkit);
   const nameFont=await doc.embedFont(nameBytes,{subset:false}),textFont=await doc.embedFont(textBytes,{subset:false});
-  const page=doc.getPage(0),H=page.getHeight();
+  writeFields(doc.getPage(0),{nameFont,textFont},p,position);
+  doc.setTitle(`Certificate of ${kind} — ${p.fullName}`);doc.setAuthor('Baroda Swim Front');
+  if(p.registrationId)doc.setSubject(`Registration ID ${p.registrationId}`);
+  return Buffer.from(await doc.save({useObjectStreams:false}));
+}
+
+// Write a swimmer's details onto a certificate page (template already drawn or loaded on it).
+function writeFields(page,{nameFont,textFont},p,position){
+  const H=page.getHeight();
   const write=(text,line,font,{gap=5}={})=>{
     for(const l of layoutLines(font,text,line,gap)){
       const w=font.widthOfTextAtSize(l.text,l.size);
@@ -74,9 +82,23 @@ async function fill(template,p,kind,position){
   if(position)write(position,LINES.position,textFont);
   // Events: one line if it fits, otherwise two lines just above the blank (see layoutLines).
   write(joinEvents((p.events||[]).filter(Boolean)),LINES.event,textFont);
-  doc.setTitle(`Certificate of ${kind} — ${p.fullName}`);doc.setAuthor('Baroda Swim Front');
-  if(p.registrationId)doc.setSubject(`Registration ID ${p.registrationId}`);
-  return Buffer.from(await doc.save({useObjectStreams:false}));
 }
 
-module.exports={certificatePdf,meritCertificatePdf,ordinal,layoutLines,LINES,load};
+// Every merit certificate in one printable PDF, one A4 page each. The signed design is embedded once and drawn on
+// every page, and the fonts are embedded once, so hundreds of certificates stay a small file.
+// list: [{fullName, schoolName, category, event, position}]
+async function meritCertificatesBook(list,{title='Merit Certificates'}={}){
+  const {meritTemplate,nameFont:nameBytes,textFont:textBytes}=load();
+  const doc=await PDFDocument.create();doc.registerFontkit(fontkit);
+  const [design]=await doc.embedPdf(meritTemplate,[0]);
+  const nameFont=await doc.embedFont(nameBytes,{subset:false}),textFont=await doc.embedFont(textBytes,{subset:false});
+  for(const p of list){
+    const page=doc.addPage([design.width,design.height]);
+    page.drawPage(design,{x:0,y:0,width:design.width,height:design.height});
+    writeFields(page,{nameFont,textFont},{...p,events:[p.event]},ordinal(p.position));
+  }
+  doc.setTitle(title);doc.setAuthor('Baroda Swim Front');
+  return Buffer.from(await doc.save());
+}
+
+module.exports={certificatePdf,meritCertificatePdf,meritCertificatesBook,ordinal,layoutLines,LINES,load};

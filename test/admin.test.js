@@ -370,6 +370,16 @@ test('admin end-to-end API regression',async t=>{
    assert.equal((await fetch(base+'/api/public/champion-photo/'+'0'.repeat(32))).status,404);
    process.env.PUBLIC_RESULTS='closed';try{assert.equal((await fetch(base+row('Q').photo)).status,404,'hidden with results')}finally{process.env.PUBLIC_RESULTS='open'}
    process.env.PUBLIC_RESULTS='closed';try{assert.deepEqual(await (await fetch(base+'/api/public/best-swimmers')).json(),{closed:true});assert.ok(Array.isArray((await api('/api/public/best-swimmers')).body),'admins still see it')}finally{process.env.PUBLIC_RESULTS='open'}}
+  // All merit certificates in one printable PDF (admin only), ordered by school.
+  {const {PDFDocument}=require('pdf-lib');
+   const all=await fetch(base+'/api/admin/merit-certificates.pdf',{headers:{cookie}});assert.equal(all.status,200);assert.equal(all.headers.get('content-type'),'application/pdf');
+   assert.match(all.headers.get('content-disposition'),/bsf-merit-certificates-by-school-\d{4}-\d{2}-\d{2}\.pdf/);
+   const count=Number(all.headers.get('x-certificate-count'));assert.ok(count>=3);
+   assert.equal((await PDFDocument.load(Buffer.from(await all.arrayBuffer()))).getPageCount(),count,'one page per certificate');
+   const one=await fetch(base+'/api/admin/merit-certificates.pdf?school='+encodeURIComponent('test school')+'&sort=event',{headers:{cookie}});assert.equal(one.status,200);
+   assert.ok(Number(one.headers.get('x-certificate-count'))>=3&&Number(one.headers.get('x-certificate-count'))<=count);
+   assert.equal((await fetch(base+'/api/admin/merit-certificates.pdf?school=No%20Such%20School',{headers:{cookie}})).status,404);
+   assert.equal((await fetch(base+'/api/admin/merit-certificates.pdf')).status,401,'admin only');}
   // Merit certificates: official podium Q 1st, R 2nd, P 3rd; S (DQ) none.
   const ticket=async kid=>(await (await fetch(base+'/api/ticket/'+kid.ticketToken)).json()).meritCertificates;
   assert.deepEqual((await ticket(kids[1])).map(m=>[m.position,m.positionLabel,m.event]),[[1,'1st','50m Freestyle']]);
