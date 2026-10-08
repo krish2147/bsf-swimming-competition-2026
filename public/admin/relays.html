@@ -1,5 +1,5 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="/bsf-logo.jpeg"><title>Relays</title><link rel="stylesheet" href="/styles.css"></head>
-<body><nav><div class="brand">Relay Desk</div><a href="/admin/">Dashboard</a><a href="/admin/timings.html">Timings</a><a href="/admin/results.html">Results</a><a href="/admin/results-preview.html">Preview</a></nav><main>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="/bsf-logo.jpeg"><title>Relays</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/mobile-nav.css"></head>
+<body><nav class="site-nav" aria-label="Main navigation"><div class="brand">Relay Desk</div><button class="nav-toggle" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="siteNavLinks"><span class="nav-toggle-bar"></span><span class="nav-toggle-bar"></span><span class="nav-toggle-bar"></span></button><div class="site-nav-links" id="siteNavLinks"><a href="/admin/">Dashboard</a><a href="/admin/payments.html">Payments</a><a href="/admin/checkin.html">Check-in</a><a href="/admin/timings.html">Timings</a><a href="/admin/relays.html" class="nav-current" aria-current="page">Relays</a><a href="/admin/results.html">Results</a><a href="/admin/results-preview.html">Preview</a></div></nav><main>
 <h1>Relays</h1><p class="notice">Make each relay team from four swimmers in the database, then enter the team's time. Teams are ranked by time on the public Results page, and every swimmer in a 1st, 2nd or 3rd team gets a merit certificate.</p>
 <div class="card"><label for="relayEvent">Relay event</label><select id="relayEvent"></select></div>
 <section class="card relay-form" id="teamForm" aria-labelledby="teamFormTitle"><h2 id="teamFormTitle">New team</h2>
@@ -10,4 +10,4 @@
  <div class="row"><button type="button" id="saveTeam">Save team</button><button type="button" class="secondary" id="resetTeam">Clear</button></div><p id="teamMsg" class="muted" role="status"></p>
 </section>
 <section aria-labelledby="teamsTitle"><h2 id="teamsTitle">Teams</h2><div id="teams"></div></section>
-</main><script src="/admin/common.js"></script><script src="/admin/relays.js"></script></body></html>
+</main><script src="/admin/common.js"></script><script src="/admin/relays.js"></script><script src="/mobile-nav.js" defer></script></body></html>

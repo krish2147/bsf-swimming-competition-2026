@@ -1,12 +1,4 @@
 (()=>{
-  /* Registration page shares the same public navigation as every other page. */
-  const oldNav=document.querySelector('nav.co-branded-header');
-  if(oldNav){
-    if(!document.querySelector('link[href="/mobile-nav.css"]')){const css=document.createElement('link');css.rel='stylesheet';css.href='/mobile-nav.css';document.head.append(css)}
-    oldNav.className='site-nav';
-    oldNav.innerHTML='<a class="brand" href="/">AARK × BSF <small>/ SWIMMING</small></a><button class="nav-toggle" type="button" aria-label="Open navigation menu" aria-expanded="false" aria-controls="siteNavLinks"><span class="nav-toggle-bar"></span><span class="nav-toggle-bar"></span><span class="nav-toggle-bar"></span></button><div class="site-nav-links" id="siteNavLinks"><a href="/">Home</a><span class="nav-current" aria-current="page">Register</span><a href="/results.html">Results</a><a href="/timings.html">Timings</a></div>';
-    const navScript=document.createElement('script');navScript.src='/mobile-nav.js';document.body.append(navScript);
-  }
   const preview=document.getElementById('payQr');
   const zoom=document.getElementById('qrZoom');
   const dialog=document.getElementById('qrDialog');
