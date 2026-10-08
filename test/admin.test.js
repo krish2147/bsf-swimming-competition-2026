@@ -303,24 +303,27 @@ test('admin end-to-end API regression',async t=>{
   rows=await live();assert.ok(rows.length&&rows.every(r=>r.published===true),'official after publish');
  });
  await t.test('relays: teams of four from the database, timed, ranked, medals for every member, absent until timed',async()=>{
-  // One combined relay: Under-12, Under-14 and Under-17, boys and girls together.
-  const key=eventKey('Under-12/14/17','Boys & Girls','4×50m Freestyle Relay');
+  // Two relays, each combining Under-12, Under-14 and Under-17: boys and girls race separately.
+  const key=eventKey('Under-12/14/17','Boys','4×50m Freestyle Relay'),girlsKey=eventKey('Under-12/14/17','Girls','4×50m Freestyle Relay');
   const dobs=['2015-03-03','2013-03-03','2011-03-03'];   // Under-12, Under-14, Under-17
-  const kids=[];for(let i=0;i<12;i++)kids.push(await register({dob:dobs[Math.floor(i/4)],gender:i%2?'Girls':'Boys',fullName:'Relay Kid '+String.fromCharCode(65+i),schoolName:'Relay School',events:JSON.stringify(i<4?['25m Freestyle','4×50m Freestyle Relay']:['100m Freestyle'])}));
+  const kids=[];for(let i=0;i<12;i++)kids.push(await register({dob:dobs[Math.floor(i/4)],gender:'Boys',fullName:'Relay Kid '+String.fromCharCode(65+i),schoolName:'Relay School',events:JSON.stringify(i<4?['25m Freestyle','4×50m Freestyle Relay']:['100m Freestyle'])}));
   const ids=kids.map(k=>k.registrationId),younger=await register({dob:'2017-01-01',fullName:'Relay Younger Kid',events:JSON.stringify(['25m Freestyle'])});
+  const girl=await register({dob:'2013-03-03',gender:'Girls',fullName:'Relay Girl Kid',schoolName:'Relay School',events:JSON.stringify(['100m Freestyle'])});
   const relayEvents=(await api('/api/admin/relay-events')).body;
-  assert.deepEqual(relayEvents.map(e=>[e.event_key,e.combined]),[[key,true]],'the combined relay is the only relay event');
+  assert.deepEqual(relayEvents.map(e=>[e.event_key,e.combined]),[[key,true],[girlsKey,true]],'a boys relay and a girls relay, each combining Under-12/14/17');
   const found=(await api('/api/admin/relay-candidates?eventKey='+encodeURIComponent(key)+'&q=Relay')).body;
-  assert.equal(found.length,12,'boys and girls from Under-12, 14 and 17; not the Under-10 swimmer');
-  assert.deepEqual(new Set(found.map(r=>r.category+' '+r.gender)).size,6);assert.equal(found.find(r=>r.registration_id===ids[0]).registeredForRelay,true);assert.equal(found.find(r=>r.registration_id===ids[5]).registeredForRelay,false);
+  assert.equal(found.length,12,'boys from Under-12, 14 and 17; not the girl, not the Under-10 swimmer');
+  assert.deepEqual([...new Set(found.map(r=>r.category+' '+r.gender))].sort(),['Under-12 Boys','Under-14 Boys','Under-17 Boys']);
+  assert.deepEqual((await api('/api/admin/relay-candidates?eventKey='+encodeURIComponent(girlsKey)+'&q=Relay')).body.map(r=>r.full_name),['Relay Girl Kid']);assert.equal(found.find(r=>r.registration_id===ids[0]).registeredForRelay,true);assert.equal(found.find(r=>r.registration_id===ids[5]).registeredForRelay,false);
   const team=(name,members,extra={})=>api('/api/admin/relays',{eventKey:key,teamName:name,members,...extra});
   const A=await team('Relay School A',ids.slice(0,4),{heatNo:1,laneNo:3});assert.equal(A.status,200);
-  const B=await team('Relay School B',[ids[4],ids[5],ids[8],ids[9]],{heatNo:1,laneNo:4});assert.equal(B.status,200,'Under-14 and Under-17, boys and girls, in one team');
+  const B=await team('Relay School B',[ids[4],ids[5],ids[8],ids[9]],{heatNo:1,laneNo:4});assert.equal(B.status,200,'Under-14 and Under-17 boys in one team');
   const C=await team('Relay School C',[ids[6],ids[7],ids[10],ids[11]]);assert.equal(C.status,200);
   assert.equal((await team('Too Few',ids.slice(8,11))).status,400);
   assert.equal((await team('Same Twice',[ids[8],ids[8],ids[9],ids[10]])).status,400);
   assert.match((await team('Clash',[ids[0],ids[6],ids[7],ids[10]])).body.error,/already in Relay School A/);
-  assert.match((await team('Wrong Age',[younger.registrationId,ids[6],ids[7],ids[11]])).body.error,/Under-10; the relay is for Under-12, Under-14, Under-17/);
+  assert.match((await team('Wrong Age',[younger.registrationId,ids[6],ids[7],ids[11]])).body.error,/Under-10 Boys; this relay is for Under-12, Under-14, Under-17 boys/);
+  assert.match((await team('Girl In Boys',[girl.registrationId,ids[6],ids[7],ids[11]])).body.error,/Under-14 Girls; this relay is for Under-12, Under-14, Under-17 boys/);
   assert.equal((await api('/api/admin/relays/'+A.body.id+'/timing',{timingText:'two minutes',status:'TIME'})).status,400);
   assert.equal((await api('/api/admin/relays/'+A.body.id+'/timing',{timingText:'02:30.10',status:'TIME'})).status,200);
   assert.equal((await api('/api/admin/relays/'+B.body.id+'/timing',{timingText:'2:25.00',status:'PENDING'})).status,200); // a typed time counts as TIME even if the status was left on PENDING
