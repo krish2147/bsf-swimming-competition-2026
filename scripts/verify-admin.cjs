@@ -339,6 +339,19 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    assert.ok((await pg.locator('#out .podium-row',{hasText:'Browser Relay Team'}).first().textContent()).includes('🥇'));assert.ok((await pg.locator('#out').textContent()).includes('02:41.30'));
    assert.deepEqual(errors,[],'relay desk console errors');await ctx.close();
    console.log('PASS relay desk: team of four from the database, timed, ranked with medal on public Results');}
+  // Navigation: every page has the full menu with only the page you are on highlighted (desktop bar and phone hamburger).
+  {const ctx=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});const pg=await ctx.newPage();
+   const pub={'/':'Home','/events.html':'Events','/register.html':'Register','/find-ticket.html':'Find Ticket','/results.html':'Results','/best-swimmers.html':'Best Swimmers','/timings.html':'Timings'};
+   for(const [url,label] of Object.entries(pub)){await pg.goto(base+url);await pg.waitForFunction(()=>document.querySelectorAll('.site-nav-links a').length===7);
+     assert.deepEqual(await pg.locator('.site-nav-links a').allTextContents(),Object.values(pub),url+' has the full menu');
+     assert.deepEqual(await pg.locator('.site-nav-links [aria-current=page]').allTextContents(),[label],url+' highlights its own page');
+     await pg.locator('.nav-toggle').tap();assert.ok(await pg.locator('.site-nav-links .nav-current').isVisible(),url+' current page shows in the hamburger');}
+   await pg.goto(base+'/admin/');await pg.locator('#pin').fill('test-pin');await pg.getByRole('button',{name:'Enter',exact:true}).tap();await pg.locator('#dash:not(.hidden)').waitFor();
+   const adm={'/admin/':'Dashboard','/admin/payments.html':'Payments','/admin/checkin.html':'Check-in','/admin/timings.html':'Timings','/admin/relays.html':'Relays','/admin/results.html':'Results','/admin/results-preview.html':'Preview'};
+   for(const [url,label] of Object.entries(adm)){await pg.goto(base+url);await pg.waitForFunction(()=>document.querySelectorAll('.site-nav-links a').length===7);
+     assert.deepEqual(await pg.locator('.site-nav-links a').allTextContents(),Object.values(adm),url+' has the full admin menu');
+     assert.deepEqual(await pg.locator('.site-nav-links [aria-current=page]').allTextContents(),[label],url+' highlights its own desk');}
+   await ctx.close();console.log('PASS navigation: full menu on every public page and admin desk, current page highlighted, phone hamburger');}
   // Events page: every Baroda Swim Front event in one place (phone and desktop).
   for(const [label,viewport] of [['mobile',{width:390,height:844}],['desktop',{width:1280,height:900}]]){
    const ctx=await browser.newContext({viewport}),pg=await ctx.newPage(),errors=[];pg.on('pageerror',e=>errors.push(e.message));pg.on('console',m=>{if(m.type()==='error')errors.push(m.text())});

@@ -1,10 +1,10 @@
-/* Responsive navigation enhancement for public competition pages */
+/* One navigation for public pages and admin desks: full page list, current page highlighted, hamburger on phones */
 .site-nav{position:sticky;top:0;z-index:50;min-height:76px;display:flex;align-items:center;gap:24px;padding:10px max(4vw,calc((100vw - 1180px)/2));background:rgba(255,255,255,.96);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
 .site-nav .brand{margin-right:auto}
 .site-nav-links{display:flex;align-items:center;gap:26px}
 .site-nav-links a,.site-nav-links .nav-current{text-decoration:none;color:var(--muted);font-size:14px;font-weight:700;white-space:nowrap}
 .site-nav-links a:hover{color:var(--accent)}
-.site-nav-links .nav-current{color:var(--accent);cursor:default;position:relative}
+.site-nav-links .nav-current{color:var(--accent);position:relative}
 .site-nav-links .nav-current::after{content:"";position:absolute;left:0;right:0;bottom:-8px;height:2px;border-radius:2px;background:var(--accent)}
 .nav-toggle{display:none;width:44px;height:44px;padding:0;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--text);box-shadow:none;gap:0;flex-direction:column;align-items:center;justify-content:center}
 .nav-toggle:hover{background:#f4f7fa;box-shadow:none}
@@ -12,7 +12,7 @@
 .nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(1){transform:translateY(7px) rotate(45deg)}
 .nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(2){opacity:0}
 .nav-toggle[aria-expanded="true"] .nav-toggle-bar:nth-child(3){transform:translateY(-7px) rotate(-45deg)}
-@media(max-width:700px){
+@media(max-width:960px){
   .site-nav{min-height:68px;padding:10px 4vw;flex-wrap:nowrap;gap:12px}
   .site-nav .brand{width:auto;margin-right:auto;font-size:14px;min-width:0}
   .site-nav .brand small{display:none}
@@ -25,3 +25,4 @@
   .site-nav-links .nav-current::after{display:none}
   body.nav-open{overflow:hidden}
 }
+.admin-page .site-nav .brand{font-size:16px;font-weight:850;color:var(--text)}
