@@ -14,7 +14,7 @@ function resetForm(){
 }
 async function loadEvents(){
   const events=await api('/api/admin/relay-events');
-  eventSelect.innerHTML=events.map(e=>`<option value="${esc(e.event_key)}">${esc(e.category)} ${esc(e.gender)} · ${esc(e.label)} (${e.teams} team${e.teams===1?'':'s'})</option>`).join('');
+  eventSelect.innerHTML=events.map(e=>`<option value="${esc(e.event_key)}">${e.combined?`Combined relay · ${esc(e.category)} · ${esc(e.gender)}`:`${esc(e.category)} ${esc(e.gender)} · ${esc(e.label)} (old)`} (${e.teams} team${e.teams===1?'':'s'})</option>`).join('');
   const wanted=new URLSearchParams(location.search).get('event');if(wanted&&events.some(e=>e.event_key===wanted))eventSelect.value=wanted;
 }
 async function loadTeams(){
@@ -32,7 +32,7 @@ const findCandidates=run(async()=>{
   if(version!==searchVersion)return;
   const inForm=new Set(legs.filter(Boolean).map(s=>s.registration_id)),editingName=editingId&&teams.find(t=>String(t.id)===String(editingId))?.team_name;
   candidatesEl.innerHTML=rows.map(r=>{const busy=r.team&&r.team!==editingName,chosen=inForm.has(r.registration_id);
-    return `<li><button type="button" class="secondary relay-candidate" data-pick='${esc(JSON.stringify({registration_id:r.registration_id,full_name:r.full_name,school_name:r.school_name}))}' ${busy||chosen?'disabled':''}><b>${esc(r.full_name)}</b><span class="muted"> · ${esc(r.school_name)} · ${esc(r.registration_id)}</span>${r.registeredForRelay?' <span class="pill">Registered for relay</span>':''}${busy?` <span class="pill">In ${esc(r.team)}</span>`:''}${chosen?' <span class="pill">Added</span>':''}</button></li>`}).join('')||'<li class="muted">No swimmers in this age group and gender match that search.</li>';
+    return `<li><button type="button" class="secondary relay-candidate" data-pick='${esc(JSON.stringify({registration_id:r.registration_id,full_name:r.full_name,school_name:r.school_name}))}' ${busy||chosen?'disabled':''}><b>${esc(r.full_name)}</b><span class="muted"> · ${esc(r.category)} ${esc(r.gender)} · ${esc(r.school_name)} · ${esc(r.registration_id)}</span>${r.registeredForRelay?' <span class="pill">Registered for relay</span>':''}${busy?` <span class="pill">In ${esc(r.team)}</span>`:''}${chosen?' <span class="pill">Added</span>':''}</button></li>`}).join('')||'<li class="muted">No Under-12, Under-14 or Under-17 swimmer matches that search.</li>';
 });
 let searchTimer;search.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(findCandidates,250)});
 candidatesEl.addEventListener('click',e=>{

@@ -258,30 +258,36 @@ app.get('/api/admin/results-preview',requireAdmin,async(req,res)=>{
 });
 // ---------- Relays: teams of four swimmers (legs 1-4) entered by an admin and timed as one team ----------
 const isRelayKey=key=>/relay/i.test(parseEventKey(key).event||'');
-const relayEventKeys=()=>CATEGORIES.flatMap(c=>['Boys','Girls'].flatMap(g=>c.events.filter(e=>/relay/i.test(e)).map(e=>eventKey(c.name,g,e))));
+// The relay is one combined race: Under-12, Under-14 and Under-17, boys and girls together, ranked as one event.
+const RELAY_EVENT='4×50m Freestyle Relay',RELAY_CATEGORIES=CATEGORIES.filter(c=>c.events.includes(RELAY_EVENT)).map(c=>c.name);
+const COMBINED_RELAY=eventKey('Under-'+RELAY_CATEGORIES.map(n=>n.replace(/^Under-/,'')).join('/'),'Boys & Girls',RELAY_EVENT);
+const isCombinedRelay=key=>key===COMBINED_RELAY;
+// Older per-age-group relay keys stay valid so any team already saved under one can still be seen, timed or deleted.
+const relayEventKeys=()=>[COMBINED_RELAY,...CATEGORIES.flatMap(c=>['Boys','Girls'].flatMap(g=>c.events.filter(e=>/relay/i.test(e)).map(e=>eventKey(c.name,g,e))))];
 async function relayTeams(key){
   const teams=await q(`SELECT id,event_key,team_name,heat_no,lane_no,timing_text,status,updated_at FROM relay_teams ${key?'WHERE event_key=$1':''} ORDER BY event_key,COALESCE(heat_no,999),COALESCE(lane_no,999),id`,key?[key]:[]);
   if(!teams.length)return [];
   const members=await q('SELECT m.team_id,m.leg,r.registration_id,r.full_name,r.school_name,r.events_json FROM relay_members m JOIN registrations r ON r.registration_id=m.registration_id WHERE m.team_id=ANY($1) ORDER BY m.team_id,m.leg',[teams.map(t=>t.id)]);
   return teams.map(t=>({...t,members:members.filter(m=>String(m.team_id)===String(t.id)).map(m=>({leg:m.leg,registration_id:m.registration_id,full_name:m.full_name,school_name:m.school_name,registeredForRelay:registrationEvents(m.events_json).includes(parseEventKey(t.event_key).event)}))}));
 }
-const relayLabel=key=>{const m=parseEventKey(key);return {event_key:key,category:m.category,gender:m.gender,event:m.event,label:CATEGORIES.find(c=>c.name===m.category)?.eventLabels?.[m.event]||m.event}};
+const relayLabel=key=>{const m=parseEventKey(key);return {event_key:key,category:m.category,gender:m.gender,event:m.event,combined:isCombinedRelay(key),label:CATEGORIES.find(c=>c.name===m.category)?.eventLabels?.[m.event]||m.event}};
 app.get('/api/admin/relay-events',requireAdmin,async(req,res)=>{
   const counts=new Map((await q('SELECT event_key,COUNT(*)::int n FROM relay_teams GROUP BY event_key')).map(r=>[r.event_key,r.n]));
-  res.json(relayEventKeys().map(k=>({...relayLabel(k),teams:counts.get(k)||0})));
+  res.json(relayEventKeys().filter(k=>isCombinedRelay(k)||counts.get(k)).map(k=>({...relayLabel(k),teams:counts.get(k)||0})));
 });
 app.get('/api/admin/relays',requireAdmin,async(req,res)=>{
   const key=String(req.query.eventKey||'');if(!relayEventKeys().includes(key))return res.status(400).json({error:'Choose a relay event.'});
   res.json({event:relayLabel(key),teams:await relayTeams(key)});
 });
-// Swimmers who can swim this relay: same age group and gender. Search by name, school or registration ID.
+// Swimmers who can swim this relay: any Under-12/14/17 boy or girl for the combined relay (otherwise the event's own
+// age group and gender). Search by name, school or registration ID.
 app.get('/api/admin/relay-candidates',requireAdmin,async(req,res)=>{
   const key=String(req.query.eventKey||'');if(!relayEventKeys().includes(key))return res.status(400).json({error:'Choose a relay event.'});
-  const {category,gender,event}=parseEventKey(key),term=String(req.query.q||'').trim().slice(0,60);
-  const rows=await q(`SELECT r.registration_id,r.full_name,r.school_name,r.events_json,(SELECT t.team_name FROM relay_members m JOIN relay_teams t ON t.id=m.team_id WHERE m.registration_id=r.registration_id AND t.event_key=$1 LIMIT 1) team
-    FROM registrations r WHERE r.age_category=$2 AND r.gender=$3 AND ($4='' OR r.full_name ILIKE '%'||$4||'%' OR r.school_name ILIKE '%'||$4||'%' OR r.registration_id ILIKE '%'||$4||'%')
-    ORDER BY r.school_name,r.full_name LIMIT 30`,[key,category,gender,term]);
-  res.json(rows.map(r=>({registration_id:r.registration_id,full_name:r.full_name,school_name:r.school_name,registeredForRelay:registrationEvents(r.events_json).includes(event),team:r.team||null})));
+  const {category,gender,event}=parseEventKey(key),term=String(req.query.q||'').trim().slice(0,60),combined=isCombinedRelay(key);
+  const rows=await q(`SELECT r.registration_id,r.full_name,r.school_name,r.age_category,r.gender,r.events_json,(SELECT t.team_name FROM relay_members m JOIN relay_teams t ON t.id=m.team_id WHERE m.registration_id=r.registration_id AND t.event_key=$1 LIMIT 1) team
+    FROM registrations r WHERE r.age_category=ANY($2) AND ($3::text IS NULL OR r.gender=$3) AND ($4='' OR r.full_name ILIKE '%'||$4||'%' OR r.school_name ILIKE '%'||$4||'%' OR r.registration_id ILIKE '%'||$4||'%')
+    ORDER BY r.school_name,r.full_name LIMIT 30`,[key,combined?RELAY_CATEGORIES:[category],combined?null:gender,term]);
+  res.json(rows.map(r=>({registration_id:r.registration_id,full_name:r.full_name,school_name:r.school_name,category:r.age_category,gender:r.gender,registeredForRelay:registrationEvents(r.events_json).includes(event),team:r.team||null})));
 });
 // Create or update a team: name, heat/lane (optional) and exactly four different swimmers of the right age group and gender.
 app.post('/api/admin/relays',requireAdmin,async(req,res)=>{
@@ -297,8 +303,8 @@ app.post('/api/admin/relays',requireAdmin,async(req,res)=>{
   const {category,gender}=parseEventKey(key);
   const regs=await q('SELECT registration_id,full_name,age_category,gender FROM registrations WHERE registration_id=ANY($1)',[members]);
   if(regs.length!==4)return res.status(400).json({error:'One of the swimmers was not found.'});
-  const wrong=regs.find(r=>r.age_category!==category||r.gender!==gender);
-  if(wrong)return res.status(400).json({error:`${wrong.full_name} is ${wrong.age_category} ${wrong.gender}, not ${category} ${gender}.`});
+  const wrong=isCombinedRelay(key)?regs.find(r=>!RELAY_CATEGORIES.includes(r.age_category)):regs.find(r=>r.age_category!==category||r.gender!==gender);
+  if(wrong)return res.status(400).json({error:isCombinedRelay(key)?`${wrong.full_name} is ${wrong.age_category}; the relay is for ${RELAY_CATEGORIES.join(', ')} swimmers.`:`${wrong.full_name} is ${wrong.age_category} ${wrong.gender}, not ${category} ${gender}.`});
   const taken=await q('SELECT r.full_name,t.team_name FROM relay_members m JOIN relay_teams t ON t.id=m.team_id JOIN registrations r ON r.registration_id=m.registration_id WHERE t.event_key=$1 AND m.registration_id=ANY($2) AND ($3::bigint IS NULL OR t.id<>$3)',[key,members,id]);
   if(taken.length)return res.status(409).json({error:`${taken[0].full_name} is already in ${taken[0].team_name}.`});
   if(id&&!(await q('SELECT 1 FROM relay_teams WHERE id=$1 AND event_key=$2',[id,key])).length)return res.status(404).json({error:'Team not found.'});
