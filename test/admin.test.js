@@ -302,6 +302,40 @@ test('admin end-to-end API regression',async t=>{
   assert.equal((await api('/api/admin/publish-event',{eventKey:key})).status,200);
   rows=await live();assert.ok(rows.length&&rows.every(r=>r.published===true),'official after publish');
  });
+ await t.test('relays: teams of four from the database, timed, ranked, medals for every member, absent until timed',async()=>{
+  const key=eventKey('Under-12','Boys','4×50m Freestyle Relay');
+  const kids=[];for(let i=0;i<12;i++)kids.push(await register({dob:'2015-03-03',fullName:'Relay Kid '+String.fromCharCode(65+i),schoolName:'Relay School',events:JSON.stringify(i<4?['25m Freestyle','4×50m Freestyle Relay']:['25m Freestyle'])}));
+  const ids=kids.map(k=>k.registrationId),older=await register({dob:'2013-01-01',fullName:'Relay Older Kid',events:JSON.stringify(['50m Backstroke'])});
+  assert.ok((await api('/api/admin/relay-events')).body.some(e=>e.event_key===key));
+  const found=(await api('/api/admin/relay-candidates?eventKey='+encodeURIComponent(key)+'&q=Relay%20Kid')).body;
+  assert.equal(found.length,12);assert.equal(found.find(r=>r.registration_id===ids[0]).registeredForRelay,true);assert.equal(found.find(r=>r.registration_id===ids[5]).registeredForRelay,false);
+  const team=(name,members,extra={})=>api('/api/admin/relays',{eventKey:key,teamName:name,members,...extra});
+  const A=await team('Relay School A',ids.slice(0,4),{heatNo:1,laneNo:3});assert.equal(A.status,200);
+  const B=await team('Relay School B',ids.slice(4,8),{heatNo:1,laneNo:4});assert.equal(B.status,200);
+  const C=await team('Relay School C',ids.slice(8,12));assert.equal(C.status,200);
+  assert.equal((await team('Too Few',ids.slice(8,11))).status,400);
+  assert.equal((await team('Same Twice',[ids[8],ids[8],ids[9],ids[10]])).status,400);
+  assert.match((await team('Clash',[ids[0],ids[8],ids[9],ids[10]])).body.error,/already in Relay School A/);
+  assert.match((await team('Wrong Age',[older.registrationId,ids[9],ids[10],ids[11]])).body.error,/Under-14/);
+  assert.equal((await api('/api/admin/relays/'+A.body.id+'/timing',{timingText:'two minutes',status:'TIME'})).status,400);
+  assert.equal((await api('/api/admin/relays/'+A.body.id+'/timing',{timingText:'02:30.10',status:'TIME'})).status,200);
+  assert.equal((await api('/api/admin/relays/'+B.body.id+'/timing',{timingText:'2:25.00',status:'PENDING'})).status,200); // a typed time counts as TIME even if the status was left on PENDING
+  const relay=async()=>(await (await fetch(base+'/api/public/results')).json()).find(e=>e.event_key===key);
+  let e=await relay();
+  assert.deepEqual(e.standings.map(s=>[s.rank,s.full_name,s.timing_text]),[[1,'Relay School B','2:25.00'],[2,'Relay School A','02:30.10']]);
+  assert.equal(e.standings[1].school_name,'Relay Kid A · Relay Kid B · Relay Kid C · Relay Kid D');assert.deepEqual(e.standings[0].lane_no,4);
+  assert.deepEqual(e.awaiting.map(s=>s.full_name),['Relay School C'],'untimed team listed (shown as Absent)');
+  assert.ok(!JSON.stringify(e).includes('registration_id'));
+  const merit=async kid=>(await (await fetch(base+'/api/ticket/'+kid.ticketToken)).json()).meritCertificates.filter(m=>/Relay/.test(m.event)).map(m=>m.position);
+  assert.deepEqual(await merit(kids[5]),[1]);assert.deepEqual(await merit(kids[2]),[2]);assert.deepEqual(await merit(kids[9]),[]);
+  const best=(await (await fetch(base+'/api/public/best-swimmers')).json()).flatMap(g=>g.swimmers);assert.ok(!best.some(x=>/^Relay Kid/.test(x.full_name)),'relay medals do not count for best swimmers');
+  const timings=await (await fetch(base+'/api/public/timings')).json();assert.ok(timings.some(r=>r.event_key===key&&r.full_name==='Relay School B'&&r.timing_text==='2:25.00'));
+  const edited=await team('Relay School C2',ids.slice(8,12),{id:C.body.id,heatNo:2,laneNo:1});assert.equal(edited.status,200);
+  assert.equal((await api('/api/admin/relays?eventKey='+encodeURIComponent(key))).body.teams.find(t=>String(t.id)===String(C.body.id)).team_name,'Relay School C2');
+  assert.equal((await fetch(base+'/api/admin/relays/'+C.body.id,{method:'DELETE',headers:{cookie}})).status,200);
+  e=await relay();assert.deepEqual(e.awaiting,[]);
+  assert.equal((await api('/api/admin/relays?eventKey='+encodeURIComponent(key),null,false)).status,401);
+ });
  await t.test('schools: count and names, spelling variants merged, CSV download',async()=>{
   for(const schoolName of ["St. Xavier's School",'st xaviers','ST. XAVIER\'S  SCHOOL','Navrachana Vidyani'])await register({schoolName,fullName:'School Count '+schoolName});
   const r=await api('/api/admin/schools');assert.equal(r.status,200);

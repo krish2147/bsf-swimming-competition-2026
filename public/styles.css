@@ -137,3 +137,7 @@ div.congrats-photo{font-size:110px;line-height:1.4;-webkit-mask-image:none;mask-
 .event-logos{display:flex;gap:10px;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line)}.event-logos img{height:40px;width:auto;border-radius:8px}
 .event-empty{display:flex;flex-wrap:wrap;align-items:center;gap:12px;justify-content:space-between}
 @media(max-width:560px){.event-card{flex-direction:column;gap:12px}.event-date{flex-basis:auto;display:flex;align-items:baseline;gap:8px;padding:8px 14px}.event-date b{font-size:24px}.event-date span{margin:0}.events-hero{flex-direction:column;align-items:flex-start;gap:12px}.events-hero-logo{width:72px;height:72px}.event-links .btn{flex:1 1 calc(50% - 10px)}}
+/* Relay desk */
+.relay-legs{list-style:none;padding:0;margin:8px 0 16px;display:grid;gap:8px}.relay-leg{display:flex;align-items:center;gap:12px;flex-wrap:wrap;border:1px dashed var(--line);border-radius:10px;padding:10px 12px}.relay-leg-no{font-weight:800;color:var(--accent);min-width:48px}.relay-leg-name{flex:1;min-width:0;overflow-wrap:anywhere}
+.relay-candidates{list-style:none;padding:0;margin:0 0 14px;display:grid;gap:6px}.relay-candidate{width:100%;justify-content:flex-start;text-align:left;flex-wrap:wrap;gap:6px}.relay-candidate .pill{padding:3px 8px;font-size:10px}
+.relay-members{margin:6px 0 12px;padding-left:22px}.relay-team h3{margin:0}.live-absent{color:var(--muted);font-style:italic}

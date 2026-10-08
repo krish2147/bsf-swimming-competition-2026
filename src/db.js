@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS checkin_audit(id BIGSERIAL PRIMARY KEY,registration_i
 CREATE TABLE IF NOT EXISTS whatsapp_queue(id BIGSERIAL PRIMARY KEY,registration_id TEXT NOT NULL,phone TEXT NOT NULL,message_type TEXT NOT NULL,payload_json JSONB NOT NULL,status TEXT NOT NULL DEFAULT 'Pending',created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
 CREATE TABLE IF NOT EXISTS race_entries(id BIGSERIAL PRIMARY KEY,event_key TEXT NOT NULL,heat_no INTEGER NOT NULL,lane_no INTEGER NOT NULL,registration_id TEXT NOT NULL REFERENCES registrations(registration_id) ON DELETE CASCADE,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),UNIQUE(event_key,registration_id),UNIQUE(event_key,heat_no,lane_no));
 CREATE TABLE IF NOT EXISTS admin_audit(id BIGSERIAL PRIMARY KEY,action TEXT NOT NULL,entity_type TEXT NOT NULL,entity_key TEXT,details_json JSONB,operator TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+-- Relay teams: four swimmers (legs 1-4) from the same age group and gender, timed as one team.
+CREATE TABLE IF NOT EXISTS relay_teams(id BIGSERIAL PRIMARY KEY,event_key TEXT NOT NULL,team_name TEXT NOT NULL,heat_no INTEGER,lane_no INTEGER,timing_text TEXT,status TEXT NOT NULL DEFAULT 'PENDING',updated_by TEXT,created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW());
+CREATE TABLE IF NOT EXISTS relay_members(team_id BIGINT NOT NULL REFERENCES relay_teams(id) ON DELETE CASCADE,leg INTEGER NOT NULL,registration_id TEXT NOT NULL REFERENCES registrations(registration_id) ON DELETE CASCADE,PRIMARY KEY(team_id,leg),UNIQUE(team_id,registration_id));
 -- Admin manual entries may not have a photo or payment screenshot.
 ALTER TABLE registrations ALTER COLUMN participant_photo DROP NOT NULL,ALTER COLUMN participant_photo_mime DROP NOT NULL,ALTER COLUMN payment_proof DROP NOT NULL,ALTER COLUMN payment_proof_mime DROP NOT NULL;
 `)}
