@@ -256,6 +256,81 @@ app.get('/api/admin/results-preview',requireAdmin,async(req,res)=>{
   res.set('Cache-Control','no-store');
   res.json({publicOpen:publicResultsOpen(),events:await eventResults()});
 });
+// ---------- Relays: teams of four swimmers (legs 1-4) entered by an admin and timed as one team ----------
+const isRelayKey=key=>/relay/i.test(parseEventKey(key).event||'');
+const relayEventKeys=()=>CATEGORIES.flatMap(c=>['Boys','Girls'].flatMap(g=>c.events.filter(e=>/relay/i.test(e)).map(e=>eventKey(c.name,g,e))));
+async function relayTeams(key){
+  const teams=await q(`SELECT id,event_key,team_name,heat_no,lane_no,timing_text,status,updated_at FROM relay_teams ${key?'WHERE event_key=$1':''} ORDER BY event_key,COALESCE(heat_no,999),COALESCE(lane_no,999),id`,key?[key]:[]);
+  if(!teams.length)return [];
+  const members=await q('SELECT m.team_id,m.leg,r.registration_id,r.full_name,r.school_name,r.events_json FROM relay_members m JOIN registrations r ON r.registration_id=m.registration_id WHERE m.team_id=ANY($1) ORDER BY m.team_id,m.leg',[teams.map(t=>t.id)]);
+  return teams.map(t=>({...t,members:members.filter(m=>String(m.team_id)===String(t.id)).map(m=>({leg:m.leg,registration_id:m.registration_id,full_name:m.full_name,school_name:m.school_name,registeredForRelay:registrationEvents(m.events_json).includes(parseEventKey(t.event_key).event)}))}));
+}
+const relayLabel=key=>{const m=parseEventKey(key);return {event_key:key,category:m.category,gender:m.gender,event:m.event,label:CATEGORIES.find(c=>c.name===m.category)?.eventLabels?.[m.event]||m.event}};
+app.get('/api/admin/relay-events',requireAdmin,async(req,res)=>{
+  const counts=new Map((await q('SELECT event_key,COUNT(*)::int n FROM relay_teams GROUP BY event_key')).map(r=>[r.event_key,r.n]));
+  res.json(relayEventKeys().map(k=>({...relayLabel(k),teams:counts.get(k)||0})));
+});
+app.get('/api/admin/relays',requireAdmin,async(req,res)=>{
+  const key=String(req.query.eventKey||'');if(!relayEventKeys().includes(key))return res.status(400).json({error:'Choose a relay event.'});
+  res.json({event:relayLabel(key),teams:await relayTeams(key)});
+});
+// Swimmers who can swim this relay: same age group and gender. Search by name, school or registration ID.
+app.get('/api/admin/relay-candidates',requireAdmin,async(req,res)=>{
+  const key=String(req.query.eventKey||'');if(!relayEventKeys().includes(key))return res.status(400).json({error:'Choose a relay event.'});
+  const {category,gender,event}=parseEventKey(key),term=String(req.query.q||'').trim().slice(0,60);
+  const rows=await q(`SELECT r.registration_id,r.full_name,r.school_name,r.events_json,(SELECT t.team_name FROM relay_members m JOIN relay_teams t ON t.id=m.team_id WHERE m.registration_id=r.registration_id AND t.event_key=$1 LIMIT 1) team
+    FROM registrations r WHERE r.age_category=$2 AND r.gender=$3 AND ($4='' OR r.full_name ILIKE '%'||$4||'%' OR r.school_name ILIKE '%'||$4||'%' OR r.registration_id ILIKE '%'||$4||'%')
+    ORDER BY r.school_name,r.full_name LIMIT 30`,[key,category,gender,term]);
+  res.json(rows.map(r=>({registration_id:r.registration_id,full_name:r.full_name,school_name:r.school_name,registeredForRelay:registrationEvents(r.events_json).includes(event),team:r.team||null})));
+});
+// Create or update a team: name, heat/lane (optional) and exactly four different swimmers of the right age group and gender.
+app.post('/api/admin/relays',requireAdmin,async(req,res)=>{
+  const b=req.body||{},key=String(b.eventKey||''),id=b.id?Number(b.id):null;
+  if(!relayEventKeys().includes(key))return res.status(400).json({error:'Choose a relay event.'});
+  const teamName=String(b.teamName||'').replace(/\s+/g,' ').trim();
+  if(!teamName||teamName.length>80)return res.status(400).json({error:'Enter a team name (up to 80 characters).'});
+  const members=Array.isArray(b.members)?b.members.map(String):[];
+  if(members.length!==4||new Set(members).size!==4)return res.status(400).json({error:'A relay team needs four different swimmers (legs 1 to 4).'});
+  const num=(v,max)=>v===''||v==null?null:(Number.isInteger(Number(v))&&Number(v)>=1&&Number(v)<=max?Number(v):NaN);
+  const heat=num(b.heatNo,99),lane=num(b.laneNo,10);
+  if(Number.isNaN(heat)||Number.isNaN(lane))return res.status(400).json({error:'Heat must be a whole number from 1, lane from 1 to 10.'});
+  const {category,gender}=parseEventKey(key);
+  const regs=await q('SELECT registration_id,full_name,age_category,gender FROM registrations WHERE registration_id=ANY($1)',[members]);
+  if(regs.length!==4)return res.status(400).json({error:'One of the swimmers was not found.'});
+  const wrong=regs.find(r=>r.age_category!==category||r.gender!==gender);
+  if(wrong)return res.status(400).json({error:`${wrong.full_name} is ${wrong.age_category} ${wrong.gender}, not ${category} ${gender}.`});
+  const taken=await q('SELECT r.full_name,t.team_name FROM relay_members m JOIN relay_teams t ON t.id=m.team_id JOIN registrations r ON r.registration_id=m.registration_id WHERE t.event_key=$1 AND m.registration_id=ANY($2) AND ($3::bigint IS NULL OR t.id<>$3)',[key,members,id]);
+  if(taken.length)return res.status(409).json({error:`${taken[0].full_name} is already in ${taken[0].team_name}.`});
+  if(id&&!(await q('SELECT 1 FROM relay_teams WHERE id=$1 AND event_key=$2',[id,key])).length)return res.status(404).json({error:'Team not found.'});
+  const teamId=await withTransaction(async c=>{
+    let tid=id;
+    if(tid)await c.query('UPDATE relay_teams SET team_name=$2,heat_no=$3,lane_no=$4,updated_by=$5,updated_at=NOW() WHERE id=$1',[tid,teamName,heat,lane,req.session.operator||'Admin']);
+    else tid=(await c.query('INSERT INTO relay_teams(event_key,team_name,heat_no,lane_no,updated_by) VALUES($1,$2,$3,$4,$5) RETURNING id',[key,teamName,heat,lane,req.session.operator||'Admin'])).rows[0].id;
+    await c.query('DELETE FROM relay_members WHERE team_id=$1',[tid]);
+    for(const [i,rid] of members.entries())await c.query('INSERT INTO relay_members(team_id,leg,registration_id) VALUES($1,$2,$3)',[tid,i+1,rid]);
+    return tid;
+  });
+  await audit(id?'UPDATE_RELAY_TEAM':'CREATE_RELAY_TEAM','relay',key,{teamId:String(teamId),teamName,members,heat,lane},req.session.operator);
+  res.json({ok:true,id:String(teamId)});
+});
+app.post('/api/admin/relays/:id/timing',requireAdmin,async(req,res)=>{
+  const b=req.body||{},typed=String(b.timingText||'').trim();
+  // A time typed while the status still says PENDING is a finished swim.
+  const status=!b.status||(b.status==='PENDING'&&typed)?'TIME':b.status;
+  if(!['TIME','DNS','DQ','PENDING'].includes(status))return res.status(400).json({error:'Status must be TIME, DNS, DQ or PENDING.'});
+  if(status==='TIME'&&String(b.timingText||'').trim()&&timingSeconds(b.timingText)==null)return res.status(400).json({error:`"${String(b.timingText).slice(0,20)}" is not a time — type it like 02:36.42`});
+  const r=await q('UPDATE relay_teams SET timing_text=$2,status=$3,updated_by=$4,updated_at=NOW() WHERE id=$1 RETURNING event_key,team_name',[Number(req.params.id)||0,String(b.timingText||'').trim()||null,status,req.session.operator||'Admin']);
+  if(!r.length)return res.status(404).json({error:'Team not found.'});
+  await audit('SAVE_RELAY_TIMING','relay',r[0].event_key,{teamId:req.params.id,team:r[0].team_name,timingText:b.timingText,status},req.session.operator);
+  res.json({ok:true});
+});
+app.delete('/api/admin/relays/:id',requireAdmin,async(req,res)=>{
+  const r=await q('DELETE FROM relay_teams WHERE id=$1 RETURNING event_key,team_name',[Number(req.params.id)||0]);
+  if(!r.length)return res.status(404).json({error:'Team not found.'});
+  await audit('DELETE_RELAY_TEAM','relay',r[0].event_key,{teamId:req.params.id,team:r[0].team_name},req.session.operator);
+  res.json({ok:true});
+});
+
 async function eventResults({withIds=false}={}){
   // Built from the heat list: every swimmer placed in a heat is listed (with heat and lane), plus any timed swimmer not in it.
   const timings=await q(`SELECT COALESCE(he.event_key,te.event_key) event_key,COALESCE(he.heat_no,te.heat_no) heat_no,he.lane_no,te.timing_text,te.status,r.registration_id,r.full_name,r.school_name
@@ -267,22 +342,29 @@ async function eventResults({withIds=false}={}){
   const events=new Map(),eventFor=key=>{if(!events.has(key)){const meta=parseEventKey(key);events.set(key,{event_key:key,meta:{...meta,label:CATEGORIES.find(c=>c.name===meta.category)?.eventLabels?.[meta.event]||meta.event},order:order.get(key)??9999,published:published.has(key),official:[],standings:[],notFinished:[],awaiting:[]})}return events.get(key)};
   const timeOf=new Map(timings.map(t=>[`${t.event_key}|${t.registration_id}`,t.timing_text]));
   for(const t of timings){
+    if(isRelayKey(t.event_key))continue;   // relay events are ranked by team (below), not by individual swimmers
     const e=eventFor(t.event_key),secs=t.status==='TIME'?timingSeconds(t.timing_text):null,swimmer={registration_id:t.registration_id,full_name:t.full_name,school_name:t.school_name,heat_no:t.heat_no,lane_no:t.lane_no};
     if(secs!=null)e.standings.push({...swimmer,timing_text:t.timing_text,seconds:secs});else if(t.status==='DNS'||t.status==='DQ')e.notFinished.push({...swimmer,status:t.status});else e.awaiting.push(swimmer);
   }
+  // Relay teams: ranked by the team's time; every member shares the team's place.
+  for(const t of await relayTeams()){
+    const e=eventFor(t.event_key),names=t.members.map(m=>m.full_name),secs=t.status==='TIME'?timingSeconds(t.timing_text):null;
+    const team={registration_ids:t.members.map(m=>m.registration_id),full_name:t.team_name,school_name:names.join(' · '),members:names,heat_no:t.heat_no,lane_no:t.lane_no,relay:true};
+    if(secs!=null)e.standings.push({...team,timing_text:t.timing_text,seconds:secs});else if(t.status==='DNS'||t.status==='DQ')e.notFinished.push({...team,status:t.status});else e.awaiting.push(team);
+  }
   for(const e of events.values()){e.standings.sort((a,b)=>a.seconds-b.seconds);e.standings.forEach((s,i)=>{s.rank=i&&s.seconds===e.standings[i-1].seconds?e.standings[i-1].rank:i+1});for(const s of e.standings)delete s.seconds}
-  for(const p of podium)eventFor(p.event_key).official.push({registration_id:p.registration_id,position:p.position,full_name:p.full_name,school_name:p.school_name,timing_text:timeOf.get(`${p.event_key}|${p.registration_id}`)||null});
+  for(const p of podium)if(!isRelayKey(p.event_key))eventFor(p.event_key).official.push({registration_id:p.registration_id,position:p.position,full_name:p.full_name,school_name:p.school_name,timing_text:timeOf.get(`${p.event_key}|${p.registration_id}`)||null});
   const list=[...events.values()].filter(e=>e.standings.length||e.official.length||e.notFinished.length||e.awaiting.length).sort((a,b)=>a.order-b.order);
-  if(!withIds)for(const e of list)for(const group of [e.official,e.standings,e.notFinished,e.awaiting])for(const x of group)delete x.registration_id;
+  if(!withIds)for(const e of list)for(const group of [e.official,e.standings,e.notFinished,e.awaiting])for(const x of group){delete x.registration_id;delete x.registration_ids}
   return list;
 }
 // Medal positions (1st–3rd) per registration, decided exactly as the Results page shows them: the official podium once
 // an event is published from the Results desk, otherwise the live standings across all heats (tied times share a place).
 async function medalsByRegistration(){
-  const medals=new Map(),add=(id,e,position,time)=>{if(!medals.has(id))medals.set(id,[]);medals.get(id).push({eventKey:e.event_key,event:e.meta.label,category:e.meta.category,position,time:time||null})};
+  const medals=new Map(),add=(id,e,position,time)=>{if(!medals.has(id))medals.set(id,[]);medals.get(id).push({eventKey:e.event_key,event:e.meta.label,category:e.meta.category,position,time:time||null,relay:isRelayKey(e.event_key)})};
   for(const e of await eventResults({withIds:true})){
     if(e.published&&e.official.length)for(const p of e.official){if(p.position>=1&&p.position<=3)add(p.registration_id,e,p.position,p.timing_text)}
-    else for(const st of e.standings)if(st.rank<=3)add(st.registration_id,e,st.rank,st.timing_text);
+    else for(const st of e.standings)if(st.rank<=3)for(const id of st.registration_ids||[st.registration_id])add(id,e,st.rank,st.timing_text);
   }
   return medals;
 }
@@ -290,7 +372,8 @@ async function medalsByRegistration(){
 // Points: 1st = 5, 2nd = 3, 3rd = 2; ties on points go to more golds, then more silvers; still level = shared rank.
 const MEDAL_POINTS={1:5,2:3,3:2};
 async function bestSwimmers({withIds=false}={}){
-  const medals=await medalsByRegistration();if(!medals.size)return [];
+  // Individual championship: relay medals are team results and do not count here.
+  const medals=new Map([...(await medalsByRegistration())].map(([id,l])=>[id,l.filter(m=>!m.relay)]).filter(([,l])=>l.length));if(!medals.size)return [];
   const regs=await q('SELECT registration_id,full_name,school_name,age_category,gender,(participant_photo IS NOT NULL AND length(participant_photo)>0) has_photo FROM registrations WHERE registration_id=ANY($1)',[[...medals.keys()]]);
   const groups=new Map(),order=new Map();let n=0;for(const c of CATEGORIES)for(const g of ['Boys','Girls'])order.set(`${c.name}|${g}`,n++);
   for(const r of regs){
@@ -348,7 +431,9 @@ app.get('/api/public/timings',async(req,res)=>{
   const order=new Map();let n=0;
   for(const c of CATEGORIES)for(const gender of ['Boys','Girls'])for(const event of c.events)order.set(eventKey(c.name,gender,event),n++);
   const label=meta=>CATEGORIES.find(c=>c.name===meta.category)?.eventLabels?.[meta.event]||meta.event;
-  res.json(rows.map(x=>{const meta=parseEventKey(x.event_key);return {event_key:x.event_key,heat_no:x.heat_no,lane_no:x.lane_no,timing_text:x.timing_text,status:x.status,full_name:x.full_name,school_name:x.school_name,published:x.published,updated_at:x.updated_at,order:order.get(x.event_key)??9999,meta:{...meta,label:label(meta)}}}));
+  const teams=(await relayTeams()).filter(t=>t.status!=='PENDING'&&(t.status!=='TIME'||String(t.timing_text||'')!==''));
+  const all=[...rows.filter(x=>!isRelayKey(x.event_key)),...teams.map(t=>({event_key:t.event_key,heat_no:t.heat_no||1,lane_no:t.lane_no,timing_text:t.timing_text,status:t.status,full_name:t.team_name,school_name:t.members.map(m=>m.full_name).join(' · '),published:false,updated_at:t.updated_at}))];
+  res.json(all.map(x=>{const meta=parseEventKey(x.event_key);return {event_key:x.event_key,heat_no:x.heat_no,lane_no:x.lane_no,timing_text:x.timing_text,status:x.status,full_name:x.full_name,school_name:x.school_name,published:x.published,updated_at:x.updated_at,order:order.get(x.event_key)??9999,meta:{...meta,label:label(meta)}}}));
 });
 
 app.post('/api/admin/login',(req,res)=>{if(req.body?.pin===process.env.ADMIN_PIN){req.session.admin=true;req.session.operator='Admin';return res.json({ok:true})}res.status(403).json({error:'Incorrect PIN'})});

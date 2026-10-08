@@ -31,7 +31,7 @@
       <h3>Full result</h3><table class="live-table"><thead><tr><th>Pos</th><th>Swimmer</th><th>Heat · Lane</th><th>Time</th></tr></thead><tbody>
       ${e.standings.map(s=>`<tr><td>${medal(s.rank)||s.rank}</td><td>${esc(s.full_name)}<div class="muted live-school">${esc(s.school_name)}</div></td>${lane(s)}<td class="live-time">${esc(s.timing_text)}</td></tr>`).join('')}
       ${e.notFinished.map(s=>`<tr class="muted"><td>—</td><td>${esc(s.full_name)}<div class="live-school">${esc(s.school_name)}</div></td>${lane(s)}<td class="live-time">${esc(s.status)}</td></tr>`).join('')}
-      ${e.awaiting.map(s=>`<tr class="muted"><td>—</td><td>${esc(s.full_name)}<div class="live-school">${esc(s.school_name)}</div></td>${lane(s)}<td>Awaiting time</td></tr>`).join('')}
+      ${e.awaiting.map(s=>`<tr class="muted"><td>—</td><td>${esc(s.full_name)}<div class="live-school">${esc(s.school_name)}</div></td>${lane(s)}<td class="live-absent">Absent</td></tr>`).join('')}
       </tbody></table></section>`;
   }
   async function load(){
