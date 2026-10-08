@@ -12,7 +12,7 @@ const {CATEGORIES,categoryForDob,eventKey,parseEventKey}=require('./src/competit
 const {registrationEvents,registrationRow,registrationColumns}=require('./src/admin-data');
 const {planHeats}=require('./src/heats');
 const {heatSheetPdf,heatSheetDocx,buildHeatSheet,heatListDocx}=require('./src/heat-sheets');
-const {certificatePdf,meritCertificatePdf,ordinal}=require('./src/certificate');
+const {certificatePdf,meritCertificatePdf,meritCertificatesBook,ordinal}=require('./src/certificate');
 const {requiresFloaters}=require('./public/floater-policy');
 const {assignHeats,heatSizes}=require('./public/heat-layout');
 const timingSeconds=require('./public/timing-parse');
@@ -584,6 +584,25 @@ async function schoolSummary(){
   return {count:schools.length,participants:schools.reduce((n,s)=>n+s.participants,0),schools};
 }
 app.get('/api/admin/schools',requireAdmin,async(req,res)=>res.json(await schoolSummary()));
+// Every merit certificate (1st, 2nd, 3rd) in one printable PDF for the admin. Ordered school by school (so each
+// school's pile prints together) or by event (?sort=event). ?school=<name> prints one school only.
+app.get('/api/admin/merit-certificates.pdf',requireAdmin,async(req,res)=>{
+  const sort=req.query.sort==='event'?'event':'school',onlySchool=req.query.school?schoolKey(req.query.school):null;
+  const medals=await medalsByRegistration();
+  const regs=medals.size?await q('SELECT registration_id,full_name,school_name FROM registrations WHERE registration_id=ANY($1)',[[...medals.keys()]]):[];
+  const order=new Map();let n=0;for(const c of CATEGORIES)for(const g of ['Boys','Girls'])for(const ev of c.events)order.set(eventKey(c.name,g,ev),n++);
+  let list=regs.flatMap(r=>medals.get(r.registration_id).map(m=>({fullName:r.full_name,schoolName:String(r.school_name||'').trim(),school:schoolKey(r.school_name),category:m.category,event:m.event,position:m.position,order:order.get(m.eventKey)??9999})));
+  if(onlySchool)list=list.filter(c=>c.school===onlySchool);
+  const byEvent=(a,b)=>a.order-b.order||a.position-b.position||a.fullName.localeCompare(b.fullName);
+  list.sort(sort==='school'?(a,b)=>a.school.localeCompare(b.school)||byEvent(a,b):byEvent);
+  if(!list.length)return res.status(404).json({error:'No merit certificates yet: no swimmer has a 1st, 2nd or 3rd place.'});
+  const pdf=await meritCertificatesBook(list,{title:`Merit Certificates — ${list.length} certificates`});
+  await audit('export','merit-certificates',null,{count:list.length,sort,school:req.query.school||null},req.session.operator);
+  const stamp=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  res.set('Content-Type','application/pdf');res.set('Content-Disposition',`attachment; filename="bsf-merit-certificates-by-${sort}-${stamp}.pdf"`);
+  res.set('X-Certificate-Count',String(list.length));
+  res.send(pdf);
+});
 app.get('/api/admin/schools.csv',requireAdmin,async(req,res)=>{
   const {schools}=await schoolSummary();
   const lines=[['Sr No','School','Participants','Checked in','Other spellings'],...schools.map((s,i)=>[i+1,s.name,s.participants,s.checkedIn,s.otherSpellings.join('; ')])].map(line=>line.map(csvCell).join(','));

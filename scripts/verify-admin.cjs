@@ -273,6 +273,9 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    await page.waitForFunction(()=>document.getElementById('schoolRows').textContent.includes('Manual Test School'));assert.match(await page.locator('#schoolsSummary').textContent(),/^\d+ school\(s\) · \d+ swimmer\(s\)$/);
    assert.equal(await page.locator('#schoolCount').textContent(),String(await page.locator('#schoolRows tr').count()));
    await page.screenshot({path:path.join(artifacts,'admin-schools.png')});await schools.getByRole('button',{name:'Close schools'}).tap();
+   {const btn=page.getByRole('link',{name:'Download all merit certificates (PDF)'});await btn.waitFor();
+    const [dl]=await Promise.all([page.waitForEvent('download'),btn.tap()]);assert.match(dl.suggestedFilename(),/^bsf-merit-certificates-by-school-\d{4}-\d{2}-\d{2}\.pdf$/);
+    assert.equal((await fs.readFile(await dl.path())).subarray(0,5).toString(),'%PDF-');}
    assert.deepEqual(errors,[],'manual entry console errors');await context.close();
    console.log('PASS admin manual entry: dashboard form, DOB → category events, saved and listed');
   }
