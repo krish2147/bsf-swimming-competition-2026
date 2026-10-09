@@ -3,7 +3,7 @@
 <h1>Relays</h1><p class="notice">There are two relays, each combining Under-12, Under-14 and Under-17: one for boys and one for girls. Pick the relay, make each team from any four of its swimmers, then enter the team's time. Teams are ranked by time on the public Results page, and every swimmer in a 1st, 2nd or 3rd team gets a merit certificate.</p>
 <div class="card"><label for="relayEvent">Relay event</label><select id="relayEvent"></select></div>
 <section class="card relay-form" id="teamForm" aria-labelledby="teamFormTitle"><h2 id="teamFormTitle">New team</h2>
- <div class="row"><div><label for="teamName">Team name</label><input id="teamName" maxlength="80" placeholder="e.g. Navrachana School A"></div><div><label for="teamHeat">Heat</label><input id="teamHeat" type="number" min="1" placeholder="1"></div><div><label for="teamLane">Lane</label><input id="teamLane" type="number" min="1" max="10" placeholder="1"></div></div>
+ <div class="row"><div><label for="teamName">Team name</label><input id="teamName" maxlength="80" placeholder="e.g. Navrachana School A"></div><div><label for="teamHeat">Heat</label><input id="teamHeat" type="number" min="1" inputmode="numeric" placeholder="Type heat no." required></div><div><label for="teamLane">Lane</label><input id="teamLane" type="number" min="1" max="10" inputmode="numeric" placeholder="Type lane no." required></div></div>
  <ol class="relay-legs" id="legs"></ol>
  <label for="swimmerSearch">Find a swimmer (name, school or registration ID)</label><input id="swimmerSearch" type="search" placeholder="Type at least 2 letters" autocomplete="off">
  <ul class="relay-candidates" id="candidates" aria-live="polite"></ul>

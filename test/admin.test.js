@@ -337,6 +337,11 @@ test('admin end-to-end API regression',async t=>{
   assert.deepEqual(await merit(kids[5]),[1]);assert.deepEqual(await merit(kids[2]),[2]);assert.deepEqual(await merit(kids[9]),[1]);assert.deepEqual(await merit(kids[10]),[]);
   const best=(await (await fetch(base+'/api/public/best-swimmers')).json()).flatMap(g=>g.swimmers);assert.ok(!best.some(x=>/^Relay Kid/.test(x.full_name)),'relay medals do not count for best swimmers');
   const timings=await (await fetch(base+'/api/public/timings')).json();assert.ok(timings.some(r=>r.event_key===key&&r.full_name==='Relay School B'&&r.timing_text==='2:25.00'));
+  // Heat and lane set from the team card along with the time; leaving them out keeps what was saved.
+  assert.equal((await api('/api/admin/relays/'+C.body.id+'/timing',{timingText:'',status:'PENDING',heatNo:'2',laneNo:'5'})).status,200);
+  assert.deepEqual((({heat_no,lane_no})=>[heat_no,lane_no])((await api('/api/admin/relays?eventKey='+encodeURIComponent(key))).body.teams.find(t=>String(t.id)===String(C.body.id))),[2,5]);
+  assert.equal((await api('/api/admin/relays/'+C.body.id+'/timing',{timingText:'',status:'PENDING',laneNo:'11'})).status,400);
+  e=await relay();assert.deepEqual(e.awaiting.map(s=>[s.full_name,s.heat_no,s.lane_no]),[['Relay School C',2,5]]);
   const edited=await team('Relay School C2',[ids[6],ids[7],ids[10],ids[11]],{id:C.body.id,heatNo:2,laneNo:1});assert.equal(edited.status,200);
   assert.equal((await api('/api/admin/relays?eventKey='+encodeURIComponent(key))).body.teams.find(t=>String(t.id)===String(C.body.id)).team_name,'Relay School C2');
   assert.equal((await fetch(base+'/api/admin/relays/'+C.body.id,{method:'DELETE',headers:{cookie}})).status,200);

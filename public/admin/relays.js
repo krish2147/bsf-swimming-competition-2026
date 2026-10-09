@@ -20,9 +20,9 @@ async function loadEvents(){
 async function loadTeams(){
   const data=await api('/api/admin/relays?eventKey='+encodeURIComponent(eventSelect.value));teams=data.teams;
   teamsEl.innerHTML=teams.map(t=>`<article class="card relay-team" data-team="${esc(t.id)}">
-    <div class="topbar"><div><h3>${esc(t.team_name)}</h3><p class="muted">Heat ${text(t.heat_no)} · Lane ${text(t.lane_no)}</p></div><div class="row"><button type="button" class="secondary" data-edit="${esc(t.id)}">Edit team</button><button type="button" class="secondary" data-delete="${esc(t.id)}">Delete</button></div></div>
+    <div class="topbar"><div><h3>${esc(t.team_name)}</h3><p class="muted relay-heat-lane">${t.heat_no&&t.lane_no?`Heat ${esc(t.heat_no)} · Lane ${esc(t.lane_no)}`:'<b class="relay-missing">Heat / lane not set: type them below and tap Save</b>'}</p></div><div class="row"><button type="button" class="secondary" data-edit="${esc(t.id)}">Edit team</button><button type="button" class="secondary" data-delete="${esc(t.id)}">Delete</button></div></div>
     <ol class="relay-members">${t.members.map(m=>`<li><b>${esc(m.full_name)}</b> <span class="muted">· ${esc(m.school_name)}${m.registeredForRelay?'':' · not registered for relay'}</span></li>`).join('')}</ol>
-    <div class="row"><input class="relay-time" aria-label="Team time" placeholder="e.g. 02:36.42" value="${esc(t.timing_text||'')}"><select class="relay-status" aria-label="Team status">${['TIME','DNS','DQ','PENDING'].map(s=>`<option ${t.status===s?'selected':''}>${s}</option>`).join('')}</select><button type="button" data-save-time="${esc(t.id)}">Save time</button></div>
+    <div class="row relay-entry"><label>Heat<input class="relay-heat" type="number" min="1" inputmode="numeric" aria-label="Heat" value="${esc(t.heat_no??'')}"></label><label>Lane<input class="relay-lane" type="number" min="1" max="10" inputmode="numeric" aria-label="Lane" value="${esc(t.lane_no??'')}"></label><label>Time<input class="relay-time" aria-label="Team time" placeholder="e.g. 02:36.42" value="${esc(t.timing_text||'')}"></label><select class="relay-status" aria-label="Team status">${['TIME','DNS','DQ','PENDING'].map(s=>`<option ${t.status===s?'selected':''}>${s}</option>`).join('')}</select><button type="button" data-save-time="${esc(t.id)}">Save</button></div>
     <p class="muted relay-state" role="status">${t.status==='PENDING'?'No time yet (shows as Absent)':t.status==='TIME'?(t.timing_text?'Saved ✓':'No time yet (shows as Absent)'):'Saved ✓ · '+esc(t.status)}</p></article>`).join('')||'<div class="notice">No teams yet for this relay. Make the first one above.</div>';
 }
 const findCandidates=run(async()=>{
@@ -46,6 +46,7 @@ document.getElementById('resetTeam').onclick=resetForm;
 document.getElementById('saveTeam').onclick=run(async()=>{
   msg.textContent='';
   if(legs.some(x=>!x)){msg.textContent='Add four swimmers (legs 1 to 4) before saving.';return}
+  if(!teamHeat.value||!teamLane.value){msg.textContent='Type the heat number and lane number before saving.';(teamHeat.value?teamLane:teamHeat).focus();return}
   await post('/api/admin/relays',{id:editingId,eventKey:eventSelect.value,teamName:teamName.value,heatNo:teamHeat.value,laneNo:teamLane.value,members:legs.map(x=>x.registration_id)});
   const saved=teamName.value.trim();resetForm();msg.textContent=`Saved ${saved} ✓`;await Promise.all([loadTeams(),refreshCounts()]);
 });
@@ -61,7 +62,8 @@ teamsEl.addEventListener('click',run(async e=>{
     await del('/api/admin/relays/'+encodeURIComponent(t.id));await Promise.all([loadTeams(),refreshCounts()]);
   }else if(save){
     const card=save.closest('[data-team]'),state=card.querySelector('.relay-state');save.disabled=true;
-    try{await post(`/api/admin/relays/${encodeURIComponent(save.dataset.saveTime)}/timing`,{timingText:card.querySelector('.relay-time').value,status:card.querySelector('.relay-status').value});const status=card.querySelector('.relay-status');if(status.value==='PENDING'&&card.querySelector('.relay-time').value.trim())status.value='TIME';state.textContent='Saved ✓'}
+    try{await post(`/api/admin/relays/${encodeURIComponent(save.dataset.saveTime)}/timing`,{timingText:card.querySelector('.relay-time').value,status:card.querySelector('.relay-status').value,heatNo:card.querySelector('.relay-heat').value,laneNo:card.querySelector('.relay-lane').value});
+      const h=card.querySelector('.relay-heat').value,l=card.querySelector('.relay-lane').value,hl=card.querySelector('.relay-heat-lane');hl.innerHTML=h&&l?`Heat ${esc(h)} · Lane ${esc(l)}`:'<b class="relay-missing">Heat / lane not set: type them below and tap Save</b>';const status=card.querySelector('.relay-status');if(status.value==='PENDING'&&card.querySelector('.relay-time').value.trim())status.value='TIME';state.textContent='Saved ✓'}
     catch(err){state.textContent=err.message;throw err}finally{save.disabled=false}
   }
 }));

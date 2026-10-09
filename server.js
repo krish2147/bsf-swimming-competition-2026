@@ -328,9 +328,13 @@ app.post('/api/admin/relays/:id/timing',requireAdmin,async(req,res)=>{
   const status=!b.status||(b.status==='PENDING'&&typed)?'TIME':b.status;
   if(!['TIME','DNS','DQ','PENDING'].includes(status))return res.status(400).json({error:'Status must be TIME, DNS, DQ or PENDING.'});
   if(status==='TIME'&&String(b.timingText||'').trim()&&timingSeconds(b.timingText)==null)return res.status(400).json({error:`"${String(b.timingText).slice(0,20)}" is not a time — type it like 02:36.42`});
-  const r=await q('UPDATE relay_teams SET timing_text=$2,status=$3,updated_by=$4,updated_at=NOW() WHERE id=$1 RETURNING event_key,team_name',[Number(req.params.id)||0,String(b.timingText||'').trim()||null,status,req.session.operator||'Admin']);
+  // Heat and lane can be set or corrected from the team card along with the time (left out = unchanged).
+  const num=(v,max)=>v===''||v==null?null:(Number.isInteger(Number(v))&&Number(v)>=1&&Number(v)<=max?Number(v):NaN);
+  const heat=num(b.heatNo,99),lane=num(b.laneNo,10);
+  if(Number.isNaN(heat)||Number.isNaN(lane))return res.status(400).json({error:'Heat must be a whole number from 1, lane from 1 to 10.'});
+  const r=await q('UPDATE relay_teams SET timing_text=$2,status=$3,updated_by=$4,updated_at=NOW(),heat_no=CASE WHEN $5 THEN $6::int ELSE heat_no END,lane_no=CASE WHEN $7 THEN $8::int ELSE lane_no END WHERE id=$1 RETURNING event_key,team_name',[Number(req.params.id)||0,String(b.timingText||'').trim()||null,status,req.session.operator||'Admin','heatNo' in b,heat,'laneNo' in b,lane]);
   if(!r.length)return res.status(404).json({error:'Team not found.'});
-  await audit('SAVE_RELAY_TIMING','relay',r[0].event_key,{teamId:req.params.id,team:r[0].team_name,timingText:b.timingText,status},req.session.operator);
+  await audit('SAVE_RELAY_TIMING','relay',r[0].event_key,{teamId:req.params.id,team:r[0].team_name,timingText:b.timingText,status,heat:b.heatNo,lane:b.laneNo},req.session.operator);
   res.json({ok:true});
 });
 app.delete('/api/admin/relays/:id',requireAdmin,async(req,res)=>{

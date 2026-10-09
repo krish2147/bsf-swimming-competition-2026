@@ -330,14 +330,18 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    for(const [n,gender,dob] of [['One','Girls','2015-04-04'],['Two','Girls','2015-04-04'],['Three','Girls','2013-04-04'],['Four','Girls','2013-04-04']])assert.equal(await pg.evaluate(async([n,gender,dob])=>{const f=new FormData();f.set('fullName','Relay Leg '+n);f.set('schoolName','Relay Desk School');f.set('gender',gender);f.set('dob',dob);f.set('events',JSON.stringify(['4×50m Freestyle Relay']));return (await fetch('/api/admin/registrations',{method:'POST',body:f})).status},[n,gender,dob]),200);
    for(const n of ['One','Two','Three','Four'])await pick('Relay Leg '+n,'Relay Leg '+n);
    assert.equal(await pg.locator('#teamName').inputValue(),'Relay Desk School','team name defaults to the first swimmer\'s school');
-   await pg.locator('#teamName').fill('Browser Relay Team');await pg.locator('#teamHeat').fill('1');await pg.locator('#teamLane').fill('2');
+   await pg.locator('#teamName').fill('Browser Relay Team');
+   await pg.locator('#saveTeam').tap();await pg.waitForFunction(()=>document.getElementById('teamMsg').textContent.includes('heat number and lane number'));
+   await pg.locator('#teamHeat').fill('1');await pg.locator('#teamLane').fill('2');
    await pg.locator('#saveTeam').tap();await pg.waitForFunction(()=>document.getElementById('teamMsg').textContent.includes('Saved'));
    const card=pg.locator('.relay-team',{hasText:'Browser Relay Team'});await card.waitFor();assert.equal(await card.locator('.relay-members li').count(),4);
-   await card.locator('.relay-time').fill('02:41.30');await card.locator('[data-save-time]').tap();await pg.waitForFunction(()=>document.querySelector('.relay-team .relay-state').textContent.startsWith('Saved'));
+   assert.equal(await card.locator('.relay-heat-lane').textContent(),'Heat 1 · Lane 2');
+   await card.locator('.relay-lane').fill('3');await card.locator('.relay-time').fill('02:41.30');await card.locator('[data-save-time]').tap();await pg.waitForFunction(()=>document.querySelector('.relay-team .relay-state').textContent.startsWith('Saved'));
    assert.ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await pg.screenshot({path:path.join(artifacts,'admin-relays.png'),fullPage:true});
    await pg.goto(base+'/results.html#'+new URLSearchParams({category:'Under-12/14/17',gender:'Girls',event:key}));
    await pg.waitForFunction(()=>document.getElementById('out').textContent.includes('Browser Relay Team'));
    assert.ok((await pg.locator('#out .podium-row',{hasText:'Browser Relay Team'}).first().textContent()).includes('🥇'));assert.ok((await pg.locator('#out').textContent()).includes('02:41.30'));
+   assert.ok((await pg.locator('#out tbody tr',{hasText:'Browser Relay Team'}).textContent()).includes('1 · 3'),'heat and lane changed on the card show on Results');
    assert.deepEqual(errors,[],'relay desk console errors');await ctx.close();
    console.log('PASS relay desk: team of four from the database, timed, ranked with medal on public Results');}
   // Navigation: every page has the full menu with only the page you are on highlighted (desktop bar and phone hamburger).
