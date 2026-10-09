@@ -342,6 +342,12 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    assert.equal(await card.locator('.relay-heat-lane').textContent(),'Heat 1 · Lane 2');
    await card.locator('.relay-lane').fill('3');await card.locator('.relay-time').fill('02:41.30');await card.locator('[data-save-time]').tap();await pg.waitForFunction(()=>document.querySelector('.relay-team .relay-state').textContent.startsWith('Saved'));
    assert.ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await pg.screenshot({path:path.join(artifacts,'admin-relays.png'),fullPage:true});
+   // Team card boxes line up: same height, and on a computer screen Heat, Lane, Time, Status and Save share one bottom edge.
+   const boxes=async()=>pg.evaluate(()=>[...document.querySelectorAll('.relay-team .relay-entry :is(input,select,button)')].map(e=>{const r=e.getBoundingClientRect();return {h:Math.round(r.height),b:Math.round(r.bottom)}}));
+   for(const b of await boxes())assert.equal(b.h,48,'every team-card box is 48px tall on a phone');
+   await pg.setViewportSize({width:1280,height:900});await pg.waitForTimeout(100);
+   const wide=await boxes();assert.equal(wide.length,5);assert.equal(new Set(wide.map(b=>b.b)).size,1,'one bottom edge on desktop: '+JSON.stringify(wide));assert.equal(new Set(wide.map(b=>b.h)).size,1);
+   await card.screenshot({path:path.join(artifacts,'admin-relay-card-desktop.png')});await pg.setViewportSize({width:390,height:844});
    await pg.goto(base+'/results.html#'+new URLSearchParams({category:'Under-12/14/17',gender:'Girls',event:key}));
    await pg.waitForFunction(()=>document.getElementById('out').textContent.includes('Browser Relay Team'));
    assert.ok((await pg.locator('#out .podium-row',{hasText:'Browser Relay Team'}).first().textContent()).includes('🥇'));assert.ok((await pg.locator('#out').textContent()).includes('02:41.30'));
