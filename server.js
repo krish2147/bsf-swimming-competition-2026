@@ -288,8 +288,27 @@ app.get('/api/admin/relay-candidates',requireAdmin,async(req,res)=>{
   const {category,gender,event}=parseEventKey(key),term=String(req.query.q||'').trim().slice(0,60),combined=isCombinedRelay(key);
   const rows=await q(`SELECT r.registration_id,r.full_name,r.school_name,r.age_category,r.gender,r.events_json,(SELECT t.team_name FROM relay_members m JOIN relay_teams t ON t.id=m.team_id WHERE m.registration_id=r.registration_id AND t.event_key=$1 LIMIT 1) team
     FROM registrations r WHERE r.age_category=ANY($2) AND ($3::text IS NULL OR r.gender=$3) AND ($4='' OR r.full_name ILIKE '%'||$4||'%' OR r.school_name ILIKE '%'||$4||'%' OR r.registration_id ILIKE '%'||$4||'%')
-    ORDER BY r.school_name,r.full_name LIMIT 30`,[key,combined?RELAY_CATEGORIES:[category],['Boys','Girls'].includes(gender)?gender:null,term]);
+    ORDER BY r.school_name,r.full_name LIMIT 30`,[key,combined?[...RELAY_CATEGORIES,RELAY_GROUP]:[category],['Boys','Girls'].includes(gender)?gender:null,term]);
   res.json(rows.map(r=>({registration_id:r.registration_id,full_name:r.full_name,school_name:r.school_name,category:r.age_category,gender:r.gender,registeredForRelay:registrationEvents(r.events_json).includes(event),team:r.team||null})));
+});
+// A swimmer who arrived on the day only for the relay: added with just name, school and gender. They get a normal
+// registration (age group "Under-12/14/17", relay as their only event, no date of birth) so certificates and results
+// work as for everyone else; the date of birth can be filled in later from the participant dialog.
+app.post('/api/admin/relay-swimmers',requireAdmin,async(req,res)=>{
+  const b=req.body||{},clean=v=>typeof v==='string'?v.trim().replace(/\s+/g,' '):'';
+  const fullName=clean(b.fullName),schoolName=clean(b.schoolName),gender=b.gender;
+  if(!fullName||!schoolName)return res.status(400).json({error:'Type the swimmer\'s name and school.'});
+  if(fullName.length>120||schoolName.length>120)return res.status(400).json({error:'Name and school must be 120 characters or fewer.'});
+  if(!['Boys','Girls'].includes(gender))return res.status(400).json({error:'Choose Boys or Girls.'});
+  if(b.allowDuplicate!==true){
+    const same=(await q('SELECT registration_id,full_name,school_name FROM registrations WHERE lower(full_name)=lower($1) AND lower(school_name)=lower($2) AND gender=$3 LIMIT 1',[fullName,schoolName,gender]))[0];
+    if(same)return res.status(409).json({code:'POSSIBLE_DUPLICATE',registrationId:same.registration_id,error:`${same.full_name} (${same.school_name}) is already registered as ${same.registration_id}. Search for them instead.`});
+  }
+  const registrationId=`BSF26-${Date.now().toString().slice(-7)}-${Math.floor(100+Math.random()*900)}`;
+  await q(`INSERT INTO registrations(registration_id,ticket_token,idempotency_key,full_name,school_name,gender,dob,age_category,phone,email,events_json,amount,payment_utr,payment_status)
+    VALUES($1,$2,$3,$4,$5,$6,NULL,$7,'',NULL,$8::jsonb,0,'Relay-only entry (Relays desk)','Verified')`,[registrationId,uuidv4(),'relay-'+uuidv4(),fullName,schoolName,gender,RELAY_GROUP,JSON.stringify([RELAY_EVENT])]);
+  await audit('RELAY_SWIMMER','registration',registrationId,{fullName,schoolName,gender},req.session.operator);
+  res.json({ok:true,registration_id:registrationId,full_name:fullName,school_name:schoolName,category:RELAY_GROUP,gender});
 });
 // Create or update a team: name, heat/lane (optional) and exactly four different swimmers of the right age group and gender.
 app.post('/api/admin/relays',requireAdmin,async(req,res)=>{
@@ -305,9 +324,9 @@ app.post('/api/admin/relays',requireAdmin,async(req,res)=>{
   const {category,gender}=parseEventKey(key);
   const regs=await q('SELECT registration_id,full_name,age_category,gender FROM registrations WHERE registration_id=ANY($1)',[members]);
   if(regs.length!==4)return res.status(400).json({error:'One of the swimmers was not found.'});
-  const ages=isCombinedRelay(key)?RELAY_CATEGORIES:[category],anyGender=!['Boys','Girls'].includes(gender);
+  const ages=isCombinedRelay(key)?[...RELAY_CATEGORIES,RELAY_GROUP]:[category],anyGender=!['Boys','Girls'].includes(gender);
   const wrong=regs.find(r=>!ages.includes(r.age_category)||(!anyGender&&r.gender!==gender));
-  if(wrong)return res.status(400).json({error:`${wrong.full_name} is ${wrong.age_category} ${wrong.gender}; this relay is for ${ages.join(', ')} ${anyGender?'swimmers':gender.toLowerCase()}.`});
+  if(wrong)return res.status(400).json({error:`${wrong.full_name} is ${wrong.age_category} ${wrong.gender}; this relay is for ${ages.filter(a=>a!==RELAY_GROUP).join(', ')} ${anyGender?'swimmers':gender.toLowerCase()}.`});
   const taken=await q('SELECT r.full_name,t.team_name FROM relay_members m JOIN relay_teams t ON t.id=m.team_id JOIN registrations r ON r.registration_id=m.registration_id WHERE t.event_key=$1 AND m.registration_id=ANY($2) AND ($3::bigint IS NULL OR t.id<>$3)',[key,members,id]);
   if(taken.length)return res.status(409).json({error:`${taken[0].full_name} is already in ${taken[0].team_name}.`});
   if(id&&!(await q('SELECT 1 FROM relay_teams WHERE id=$1 AND event_key=$2',[id,key])).length)return res.status(404).json({error:'Team not found.'});

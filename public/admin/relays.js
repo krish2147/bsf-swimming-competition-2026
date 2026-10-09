@@ -41,6 +41,23 @@ candidatesEl.addEventListener('click',e=>{
   legs[i]=JSON.parse(b.dataset.pick);renderLegs();findCandidates();
   if(!teamName.value.trim()&&i===0)teamName.value=legs[0].school_name;
 });
+// New relay-only swimmer: name, school and gender, saved as a registration, then dropped into the next empty leg.
+const newName=document.getElementById('newName'),newSchool=document.getElementById('newSchool'),newGender=document.getElementById('newGender'),newMsg=document.getElementById('newMsg');
+const relayGender=()=>{const g=(eventSelect.value||'').split('|||')[1];return ['Boys','Girls'].includes(g)?g:null};
+function syncNewSwimmer(){const g=relayGender();if(g)newGender.value=g;newGender.disabled=!!g;if(!newSchool.value&&teamName.value)newSchool.value=teamName.value}
+document.getElementById('newSwimmer').addEventListener('toggle',syncNewSwimmer);
+document.getElementById('addNewSwimmer').onclick=run(async()=>{
+  newMsg.textContent='';const i=legs.findIndex(x=>!x);
+  if(i<0){newMsg.textContent='All four legs are filled. Remove one first.';return}
+  if(!newName.value.trim()||!newSchool.value.trim()){newMsg.textContent='Type the swimmer\'s name and school.';return}
+  const body={fullName:newName.value,schoolName:newSchool.value,gender:newGender.value};
+  let res=await fetch('/api/admin/relay-swimmers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}),data=await res.json().catch(()=>({}));
+  if(res.status===409&&confirm(`${data.error}\n\nAdd a new entry anyway?`)){res=await fetch('/api/admin/relay-swimmers',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,allowDuplicate:true})});data=await res.json().catch(()=>({}))}
+  if(!res.ok){newMsg.textContent=data.error||'Could not add the swimmer.';return}
+  legs[i]={registration_id:data.registration_id,full_name:data.full_name,school_name:data.school_name};renderLegs();
+  if(!teamName.value.trim()&&i===0)teamName.value=data.school_name;
+  newMsg.textContent=`Added ${data.full_name} to leg ${i+1} ✓`;newName.value='';newName.focus();
+});
 legsEl.addEventListener('click',e=>{const b=e.target.closest('[data-remove-leg]');if(!b)return;legs[Number(b.dataset.removeLeg)]=null;renderLegs();findCandidates()});
 document.getElementById('resetTeam').onclick=resetForm;
 document.getElementById('saveTeam').onclick=run(async()=>{
@@ -68,5 +85,5 @@ teamsEl.addEventListener('click',run(async e=>{
   }
 }));
 async function refreshCounts(){const v=eventSelect.value;await loadEvents();eventSelect.value=v}
-eventSelect.addEventListener('change',run(async()=>{resetForm();history.replaceState(null,'','?event='+encodeURIComponent(eventSelect.value));await loadTeams()}));
-run(async()=>{if(!await authenticated())return;renderLegs();await loadEvents();await loadTeams()})();
+eventSelect.addEventListener('change',run(async()=>{resetForm();syncNewSwimmer();history.replaceState(null,'','?event='+encodeURIComponent(eventSelect.value));await loadTeams()}));
+run(async()=>{if(!await authenticated())return;renderLegs();await loadEvents();syncNewSwimmer();await loadTeams()})();
