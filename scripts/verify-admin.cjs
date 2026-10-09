@@ -328,13 +328,17 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    // Four swimmers of our own, added through the admin manual entry, so this check never depends on other tests' swimmers.
    // A girls' team mixing Under-12 and Under-14, in the combined girls' relay.
    for(const [n,gender,dob] of [['One','Girls','2015-04-04'],['Two','Girls','2015-04-04'],['Three','Girls','2013-04-04'],['Four','Girls','2013-04-04']])assert.equal(await pg.evaluate(async([n,gender,dob])=>{const f=new FormData();f.set('fullName','Relay Leg '+n);f.set('schoolName','Relay Desk School');f.set('gender',gender);f.set('dob',dob);f.set('events',JSON.stringify(['4×50m Freestyle Relay']));return (await fetch('/api/admin/registrations',{method:'POST',body:f})).status},[n,gender,dob]),200);
-   for(const n of ['One','Two','Three','Four'])await pick('Relay Leg '+n,'Relay Leg '+n);
+   for(const n of ['One','Two','Three'])await pick('Relay Leg '+n,'Relay Leg '+n);
+   // Leg 4: a girl who came only for the relay, added with name, school and gender (gender fixed by the relay).
+   await pg.locator('#newSwimmer summary').tap();assert.equal(await pg.locator('#newGender').inputValue(),'Girls');assert.equal(await pg.locator('#newGender').isDisabled(),true);
+   await pg.locator('#newName').fill('Walk-in Relay Girl');await pg.locator('#newSchool').fill('Relay Desk School');await pg.locator('#addNewSwimmer').tap();
+   await pg.waitForFunction(()=>document.getElementById('newMsg').textContent.includes('leg 4'));assert.ok((await pg.locator('#legs').textContent()).includes('Walk-in Relay Girl'));
    assert.equal(await pg.locator('#teamName').inputValue(),'Relay Desk School','team name defaults to the first swimmer\'s school');
    await pg.locator('#teamName').fill('Browser Relay Team');
    await pg.locator('#saveTeam').tap();await pg.waitForFunction(()=>document.getElementById('teamMsg').textContent.includes('heat number and lane number'));
    await pg.locator('#teamHeat').fill('1');await pg.locator('#teamLane').fill('2');
    await pg.locator('#saveTeam').tap();await pg.waitForFunction(()=>document.getElementById('teamMsg').textContent.includes('Saved'));
-   const card=pg.locator('.relay-team',{hasText:'Browser Relay Team'});await card.waitFor();assert.equal(await card.locator('.relay-members li').count(),4);
+   const card=pg.locator('.relay-team',{hasText:'Browser Relay Team'});await card.waitFor();assert.equal(await card.locator('.relay-members li').count(),4);assert.ok((await card.textContent()).includes('Walk-in Relay Girl'));
    assert.equal(await card.locator('.relay-heat-lane').textContent(),'Heat 1 · Lane 2');
    await card.locator('.relay-lane').fill('3');await card.locator('.relay-time').fill('02:41.30');await card.locator('[data-save-time]').tap();await pg.waitForFunction(()=>document.querySelector('.relay-team .relay-state').textContent.startsWith('Saved'));
    assert.ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await pg.screenshot({path:path.join(artifacts,'admin-relays.png'),fullPage:true});

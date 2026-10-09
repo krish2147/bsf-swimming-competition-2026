@@ -19,6 +19,8 @@ CREATE TABLE IF NOT EXISTS relay_teams(id BIGSERIAL PRIMARY KEY,event_key TEXT N
 CREATE TABLE IF NOT EXISTS relay_members(team_id BIGINT NOT NULL REFERENCES relay_teams(id) ON DELETE CASCADE,leg INTEGER NOT NULL,registration_id TEXT NOT NULL REFERENCES registrations(registration_id) ON DELETE CASCADE,PRIMARY KEY(team_id,leg),UNIQUE(team_id,registration_id));
 -- Admin manual entries may not have a photo or payment screenshot.
 ALTER TABLE registrations ALTER COLUMN participant_photo DROP NOT NULL,ALTER COLUMN participant_photo_mime DROP NOT NULL,ALTER COLUMN payment_proof DROP NOT NULL,ALTER COLUMN payment_proof_mime DROP NOT NULL;
+-- Relay-only swimmers added on the Relays desk are entered with just name, school and gender (no date of birth).
+ALTER TABLE registrations ALTER COLUMN dob DROP NOT NULL;
 `)}
 async function withTransaction(fn){const c=await pool.connect();try{await c.query('BEGIN');const r=await fn(c);await c.query('COMMIT');return r}catch(e){await c.query('ROLLBACK');throw e}finally{c.release()}}
 module.exports={pool,initDb,withTransaction};

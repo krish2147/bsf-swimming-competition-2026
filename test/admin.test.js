@@ -342,6 +342,24 @@ test('admin end-to-end API regression',async t=>{
   assert.deepEqual((({heat_no,lane_no})=>[heat_no,lane_no])((await api('/api/admin/relays?eventKey='+encodeURIComponent(key))).body.teams.find(t=>String(t.id)===String(C.body.id))),[2,5]);
   assert.equal((await api('/api/admin/relays/'+C.body.id+'/timing',{timingText:'',status:'PENDING',laneNo:'11'})).status,400);
   e=await relay();assert.deepEqual(e.awaiting.map(s=>[s.full_name,s.heat_no,s.lane_no]),[['Relay School C',2,5]]);
+  // Relay-only swimmers who arrived on the day: name, school and gender only.
+  const addNew=body=>api('/api/admin/relay-swimmers',body);
+  assert.equal((await addNew({fullName:'',schoolName:'Late School',gender:'Boys'})).status,400);
+  assert.equal((await addNew({fullName:'Late Kid',schoolName:'Late School',gender:'Other'})).status,400);
+  const late=[];for(const n of ['W','X','Y','Z']){const r=await addNew({fullName:'Late Kid '+n,schoolName:'Late School',gender:'Boys'});assert.equal(r.status,200);assert.equal(r.body.category,'Under-12/14/17');late.push(r.body.registration_id)}
+  assert.equal((await addNew({fullName:'late kid w',schoolName:'LATE SCHOOL',gender:'Boys'})).status,409,'same name, school and gender asks first');
+  assert.equal((await addNew({fullName:'Late Kid W',schoolName:'Late School',gender:'Boys',allowDuplicate:true})).status,200);
+  assert.deepEqual((await api('/api/admin/relay-candidates?eventKey='+encodeURIComponent(key)+'&q=Late%20Kid')).body.length,5,'new swimmers are found in the relay search');
+  assert.equal((await api('/api/admin/relay-candidates?eventKey='+encodeURIComponent(girlsKey)+'&q=Late%20Kid')).body.length,0);
+  const L=await team('Late School',late,{heatNo:2,laneNo:6});assert.equal(L.status,200,JSON.stringify(L.body));
+  assert.equal((await api('/api/admin/relays/'+L.body.id+'/timing',{timingText:'2:50.00',status:'TIME'})).status,200);
+  const lateRow=(await query('SELECT ticket_token,dob FROM registrations WHERE registration_id=$1',[late[0]])).rows[0];assert.equal(lateRow.dob,null);
+  const lateTicket=await (await fetch(base+'/api/ticket/'+lateRow.ticket_token)).json();
+  assert.equal(lateTicket.fullName,'Late Kid W');assert.deepEqual(lateTicket.meritCertificates.map(m=>m.position),[3],'relay-only swimmer gets the merit certificate');
+  const lateCert=await fetch(base+lateTicket.meritCertificates[0].url);assert.equal(lateCert.status,200);assert.equal(lateCert.headers.get('content-type'),'application/pdf');
+  const lateDetails=await api('/api/admin/registrations/'+late[0]);assert.equal(lateDetails.status,200);
+  assert.equal((await fetch(base+'/api/admin/registrations.csv',{headers:{cookie}})).status,200);
+  assert.equal((await fetch(base+'/api/admin/relays/'+L.body.id,{method:'DELETE',headers:{cookie}})).status,200);
   const edited=await team('Relay School C2',[ids[6],ids[7],ids[10],ids[11]],{id:C.body.id,heatNo:2,laneNo:1});assert.equal(edited.status,200);
   assert.equal((await api('/api/admin/relays?eventKey='+encodeURIComponent(key))).body.teams.find(t=>String(t.id)===String(C.body.id)).team_name,'Relay School C2');
   assert.equal((await fetch(base+'/api/admin/relays/'+C.body.id,{method:'DELETE',headers:{cookie}})).status,200);

@@ -7,6 +7,13 @@
  <ol class="relay-legs" id="legs"></ol>
  <label for="swimmerSearch">Find a swimmer (name, school or registration ID)</label><input id="swimmerSearch" type="search" placeholder="Type at least 2 letters" autocomplete="off">
  <ul class="relay-candidates" id="candidates" aria-live="polite"></ul>
+ <details class="relay-new" id="newSwimmer"><summary>Swimmer not in the list? Add a new swimmer (name, school, gender only)</summary>
+  <p class="muted">For swimmers who came on the day only for the relay. They are saved as a relay-only entry and put in the next empty leg.</p>
+  <label for="newName">Swimmer name</label><input id="newName" autocomplete="off" maxlength="120">
+  <label for="newSchool">School</label><input id="newSchool" autocomplete="off" maxlength="120">
+  <label for="newGender">Gender</label><select id="newGender"><option>Boys</option><option>Girls</option></select>
+  <button type="button" id="addNewSwimmer">Add swimmer to team</button><p class="muted" id="newMsg" role="status"></p>
+ </details>
  <div class="row"><button type="button" id="saveTeam">Save team</button><button type="button" class="secondary" id="resetTeam">Clear</button></div><p id="teamMsg" class="muted" role="status"></p>
 </section>
 <section aria-labelledby="teamsTitle"><h2 id="teamsTitle">Teams</h2><div id="teams"></div></section>
