@@ -338,7 +338,7 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    await pg.locator('#saveTeam').tap();await pg.waitForFunction(()=>document.getElementById('teamMsg').textContent.includes('heat number and lane number'));
    await pg.locator('#teamHeat').fill('1');await pg.locator('#teamLane').fill('2');
    await pg.locator('#saveTeam').tap();await pg.waitForFunction(()=>document.getElementById('teamMsg').textContent.includes('Saved'));
-   const card=pg.locator('.relay-team',{hasText:'Browser Relay Team'});await card.waitFor();assert.equal(await card.locator('.relay-members li').count(),4);assert.ok((await card.textContent()).includes('Walk-in Relay Girl'));
+   const card=pg.locator('.relay-team',{hasText:'Browser Relay Team'});await card.waitFor();assert.equal(await card.locator('.relay-members li').count(),4);assert.ok((await card.textContent()).includes('Walk-in Relay Girl'));assert.ok(!(await card.textContent()).includes('not registered'),'no "not registered for relay" note on team cards');
    assert.equal(await card.locator('.relay-heat-lane').textContent(),'Heat 1 · Lane 2');
    await card.locator('.relay-lane').fill('3');await card.locator('.relay-time').fill('02:41.30');await card.locator('[data-save-time]').tap();await pg.waitForFunction(()=>document.querySelector('.relay-team .relay-state').textContent.startsWith('Saved'));
    assert.ok(await pg.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await pg.screenshot({path:path.join(artifacts,'admin-relays.png'),fullPage:true});
