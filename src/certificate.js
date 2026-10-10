@@ -101,4 +101,21 @@ async function meritCertificatesBook(list,{title='Merit Certificates'}={}){
   return Buffer.from(await doc.save());
 }
 
-module.exports={certificatePdf,meritCertificatePdf,meritCertificatesBook,ordinal,layoutLines,LINES,load};
+// A printable book mixing merit and participation pages (e.g. every relay swimmer). Each signed design and each font
+// is embedded once. list: [{kind:'merit'|'participation', fullName, schoolName, category, event, position?}]
+async function certificatesBook(list,{title='Certificates'}={}){
+  const {template,meritTemplate,nameFont:nameBytes,textFont:textBytes}=load();
+  const doc=await PDFDocument.create();doc.registerFontkit(fontkit);
+  const designs={};
+  for(const kind of new Set(list.map(p=>p.kind)))[designs[kind]]=await doc.embedPdf(kind==='merit'?meritTemplate:template,[0]);
+  const nameFont=await doc.embedFont(nameBytes,{subset:false}),textFont=await doc.embedFont(textBytes,{subset:false});
+  for(const p of list){
+    const design=designs[p.kind],page=doc.addPage([design.width,design.height]);
+    page.drawPage(design,{x:0,y:0,width:design.width,height:design.height});
+    writeFields(page,{nameFont,textFont},{...p,events:[p.event]},p.kind==='merit'?ordinal(p.position):undefined);
+  }
+  doc.setTitle(title);doc.setAuthor('Baroda Swim Front');
+  return Buffer.from(await doc.save());
+}
+
+module.exports={certificatePdf,meritCertificatePdf,meritCertificatesBook,certificatesBook,ordinal,layoutLines,LINES,load};
