@@ -359,10 +359,14 @@ test('admin end-to-end API regression',async t=>{
   const lateCert=await fetch(base+lateTicket.meritCertificates[0].url);assert.equal(lateCert.status,200);assert.equal(lateCert.headers.get('content-type'),'application/pdf');
   const lateDetails=await api('/api/admin/registrations/'+late[0]);assert.equal(lateDetails.status,200);
   assert.equal((await fetch(base+'/api/admin/registrations.csv',{headers:{cookie}})).status,200);
-  // Relay certificates book: 3 placed teams x 4 swimmers merit pages; participation for every team that swam (C has no time yet).
-  const book=async kind=>{const r=await fetch(base+'/api/admin/relay-certificates.pdf'+(kind?'?kind='+kind:''),{headers:{cookie}});return {status:r.status,type:r.headers.get('content-type'),count:Number(r.headers.get('x-certificate-count')),bytes:(await r.arrayBuffer()).byteLength}};
-  const meritBook=await book('merit');assert.equal(meritBook.status,200);assert.equal(meritBook.type,'application/pdf');assert.equal(meritBook.count,12);
-  assert.equal((await book('participation')).count,12);assert.equal((await book()).count,24);
+  // Relay merit certificates book: 3 placed teams x 4 swimmers. The relay has no participation certificates.
+  const book=async()=>{const r=await fetch(base+'/api/admin/relay-certificates.pdf',{headers:{cookie}});return {status:r.status,type:r.headers.get('content-type'),count:Number(r.headers.get('x-certificate-count')),bytes:(await r.arrayBuffer()).byteLength}};
+  const meritBook=await book();assert.equal(meritBook.status,200);assert.equal(meritBook.type,'application/pdf');assert.equal(meritBook.count,12);
+  const relayKid=(await (await fetch(base+'/api/ticket/'+kids[0].ticketToken)).json()).participationCertificates.map(c=>c.event);
+  assert.deepEqual(relayKid,['25m Freestyle'],'no relay participation certificate on the ticket');
+  assert.equal((await fetch(base+'/api/certificate/'+kids[0].ticketToken+'?event='+encodeURIComponent('4×50m Freestyle Relay'))).status,404);
+  assert.equal((await fetch(base+'/api/certificate/'+lateRow.ticket_token)).status,404,'relay-only swimmer has no participation certificate');
+  assert.deepEqual((await (await fetch(base+'/api/ticket/'+lateRow.ticket_token)).json()).participationCertificates,[]);
   assert.ok(meritBook.bytes<2_000_000,'designs and fonts embedded once: '+meritBook.bytes);
   assert.equal((await fetch(base+'/api/admin/relay-certificates.pdf')).status,401);
   assert.equal((await fetch(base+'/api/admin/relays/'+L.body.id,{method:'DELETE',headers:{cookie}})).status,200);

@@ -348,9 +348,10 @@ const {writeQrCamera}=require('../test-support/fake-camera.cjs');
    await pg.setViewportSize({width:1280,height:900});await pg.waitForTimeout(100);
    const wide=await boxes();assert.equal(wide.length,5);assert.equal(new Set(wide.map(b=>b.b)).size,1,'one bottom edge on desktop: '+JSON.stringify(wide));assert.equal(new Set(wide.map(b=>b.h)).size,1);
    await card.screenshot({path:path.join(artifacts,'admin-relay-card-desktop.png')});await pg.setViewportSize({width:390,height:844});
-   // Relay certificate downloads on the desk: merit for 1st-3rd teams, participation for every relay swimmer.
-   for(const [label,kind] of [['Merit certificates: 1st, 2nd, 3rd teams (PDF)','merit'],['Participation certificates: all relay swimmers (PDF)','participation']]){
-     const link=pg.getByRole('link',{name:label});assert.equal(await link.getAttribute('href'),'/api/admin/relay-certificates.pdf?kind='+kind);
+   // Relay certificate download on the desk: merit for 1st-3rd teams only.
+   assert.equal(await pg.getByRole('link',{name:/Participation/}).count(),0,'no relay participation certificates');
+   for(const [label,kind] of [['Merit certificates: 1st, 2nd, 3rd teams (PDF)','merit']]){
+     const link=pg.getByRole('link',{name:label});assert.equal(await link.getAttribute('href'),'/api/admin/relay-certificates.pdf');
      const got=await pg.evaluate(async h=>{const r=await fetch(h);return [r.status,r.headers.get('content-type'),Number(r.headers.get('x-certificate-count'))]},await link.getAttribute('href'));
      assert.equal(got[0],200);assert.equal(got[1],'application/pdf');assert.ok(got[2]>=4,kind+' has the team\'s four swimmers');}
    await pg.goto(base+'/results.html#'+new URLSearchParams({category:'Under-12/14/17',gender:'Girls',event:key}));
