@@ -199,17 +199,21 @@ function certificatesFrom(){const d=new Date(process.env.CERTIFICATES_FROM||DEFA
 const certificatesAvailable=()=>Date.now()>=certificatesFrom().getTime();
 // One participation certificate per event the swimmer entered (?event=<event>); certificateUrl stays the swimmer's link.
 const certificateInfo=(token,events=[],labels={})=>{const base=`/api/certificate/${encodeURIComponent(token)}`;return {certificateUrl:base,certificateAvailable:certificatesAvailable(),certificateAvailableFrom:certificatesFrom().toISOString(),
-  participationCertificates:events.map(e=>({event:labels[e]||e,url:`${base}?event=${encodeURIComponent(e)}`}))}};
+  participationCertificates:events.filter(e=>!isRelayEvent(e)).map(e=>({event:labels[e]||e,url:`${base}?event=${encodeURIComponent(e)}`}))}};
+// The relay has merit certificates only (for 1st-3rd teams); there is no participation certificate for it.
+const isRelayEvent=e=>/relay/i.test(String(e||''));
 const eventLabelsFor=category=>CATEGORIES.find(c=>c.name===category)?.eventLabels||{};
 app.get('/api/certificate/:token',async(req,res)=>{
   res.set('Cache-Control','no-store');
   const r=(await q('SELECT registration_id,full_name,school_name,age_category,gender,events_json FROM registrations WHERE ticket_token=$1',[req.params.token]))[0];
   if(!r)return res.status(404).json({error:'Certificate not found. Please use the link from your ticket.'});
   if(!certificatesAvailable())return res.status(403).json({error:'Participation certificates can be downloaded from 4 October 2026, the day of the competition.',code:'CERTIFICATE_NOT_YET_AVAILABLE',availableFrom:certificatesFrom().toISOString()});
-  const labels=eventLabelsFor(r.age_category),entered=registrationEvents(r.events_json),slug=v=>String(v).replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');
+  const labels=eventLabelsFor(r.age_category),entered=registrationEvents(r.events_json).filter(e=>!isRelayEvent(e)),slug=v=>String(v).replace(/[^A-Za-z0-9]+/g,'-').replace(/^-|-$/g,'');
   // ?event=<event>: the certificate for that one event; without it, one event's certificate (or all events, for old links).
   const chosen=req.query.event?[String(req.query.event)]:entered;
+  if(req.query.event&&isRelayEvent(chosen[0]))return res.status(404).json({error:'The relay has merit certificates only, for the 1st, 2nd and 3rd teams.',code:'NO_RELAY_PARTICIPATION'});
   if(req.query.event&&!entered.includes(chosen[0]))return res.status(404).json({error:'This swimmer did not enter that event.',code:'EVENT_NOT_ENTERED'});
+  if(!chosen.length)return res.status(404).json({error:'No participation certificate: this swimmer was entered for the relay only, which has merit certificates only.',code:'NO_RELAY_PARTICIPATION'});
   const pdf=await certificatePdf({fullName:r.full_name,schoolName:r.school_name,category:r.age_category,gender:r.gender,events:chosen.map(e=>labels[e]||e),registrationId:r.registration_id});
   const file=`BSF-Participation-Certificate-${slug(r.full_name)||r.registration_id}${chosen.length===1&&req.query.event?'-'+slug(labels[chosen[0]]||chosen[0]):''}.pdf`;
   res.set('Content-Type','application/pdf');res.set('Content-Disposition',`attachment; filename="${file}"`);
@@ -703,29 +707,27 @@ async function schoolSummary(){
 app.get('/api/admin/schools',requireAdmin,async(req,res)=>res.json(await schoolSummary()));
 // Every merit certificate (1st, 2nd, 3rd) in one printable PDF for the admin. Ordered school by school (so each
 // school's pile prints together) or by event (?sort=event). ?school=<name> prints one school only.
-// Relay certificates in one printable PDF, relay by relay (boys, then girls), teams in finishing order, swimmers by leg.
-// ?kind=merit: swimmers of 1st-3rd teams · participation: every swimmer of a team that swam (timed or DQ) · all: both.
+// Relay merit certificates in one printable PDF: every swimmer of the 1st, 2nd and 3rd teams, relay by relay (boys,
+// then girls), teams in finishing order, swimmers by leg. The relay has no participation certificates.
 app.get('/api/admin/relay-certificates.pdf',requireAdmin,async(req,res)=>{
-  const kind=['merit','participation'].includes(req.query.kind)?req.query.kind:'all';
   const results=new Map((await eventResults({withIds:true})).filter(e=>isRelayKey(e.event_key)).map(e=>[e.event_key,e]));
   const relayOrder=k=>{const i=COMBINED_RELAYS.indexOf(k);return i<0?99:i};
   const teams=(await relayTeams()).filter(t=>results.has(t.event_key)).sort((a,b)=>relayOrder(a.event_key)-relayOrder(b.event_key)||a.event_key.localeCompare(b.event_key));
   const rankOf=t=>{const ids=t.members.map(m=>m.registration_id).sort().join();return results.get(t.event_key).standings.find(s=>[...(s.registration_ids||[])].sort().join()===ids)?.rank};
-  const merit=[],participation=[];
+  const merit=[];
   for(const t of teams.map(t=>({t,rank:rankOf(t)})).sort((a,b)=>relayOrder(a.t.event_key)-relayOrder(b.t.event_key)||(a.rank??999)-(b.rank??999)||a.t.team_name.localeCompare(b.t.team_name)).map(x=>({...x.t,rank:x.rank}))){
     const meta=results.get(t.event_key).meta,base={category:meta.category,event:meta.label};
     for(const m of [...t.members].sort((a,b)=>a.leg-b.leg)){
       const p={...base,fullName:m.full_name,schoolName:String(m.school_name||'').trim()};
       if(t.rank>=1&&t.rank<=3)merit.push({...p,kind:'merit',position:t.rank});
-      if(t.status==='DQ'||t.rank!=null)participation.push({...p,kind:'participation'});
     }
   }
-  const list=kind==='merit'?merit:kind==='participation'?participation:[...merit,...participation];
-  if(!list.length)return res.status(404).json({error:kind==='merit'?'No relay merit certificates yet: no relay team has a time.':'No relay certificates yet: no relay team has a time.'});
-  const pdf=await certificatesBook(list,{title:`Relay Certificates — ${list.length} certificates`});
-  await audit('export','relay-certificates',null,{kind,count:list.length},req.session.operator);
+  const list=merit;
+  if(!list.length)return res.status(404).json({error:'No relay merit certificates yet: no relay team has a time.'});
+  const pdf=await certificatesBook(list,{title:`Relay Merit Certificates — ${list.length} certificates`});
+  await audit('export','relay-certificates',null,{count:list.length},req.session.operator);
   const stamp=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
-  res.set('Content-Type','application/pdf');res.set('Content-Disposition',`attachment; filename="bsf-relay-${kind==='all'?'':kind+'-'}certificates-${stamp}.pdf"`);
+  res.set('Content-Type','application/pdf');res.set('Content-Disposition',`attachment; filename="bsf-relay-merit-certificates-${stamp}.pdf"`);
   res.set('X-Certificate-Count',String(list.length));
   res.send(pdf);
 });
