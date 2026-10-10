@@ -12,7 +12,7 @@ const {CATEGORIES,categoryForDob,eventKey,parseEventKey}=require('./src/competit
 const {registrationEvents,registrationRow,registrationColumns}=require('./src/admin-data');
 const {planHeats}=require('./src/heats');
 const {heatSheetPdf,heatSheetDocx,buildHeatSheet,heatListDocx}=require('./src/heat-sheets');
-const {certificatePdf,meritCertificatePdf,meritCertificatesBook,ordinal}=require('./src/certificate');
+const {certificatePdf,meritCertificatePdf,meritCertificatesBook,certificatesBook,ordinal}=require('./src/certificate');
 const {requiresFloaters}=require('./public/floater-policy');
 const {assignHeats,heatSizes}=require('./public/heat-layout');
 const timingSeconds=require('./public/timing-parse');
@@ -703,6 +703,32 @@ async function schoolSummary(){
 app.get('/api/admin/schools',requireAdmin,async(req,res)=>res.json(await schoolSummary()));
 // Every merit certificate (1st, 2nd, 3rd) in one printable PDF for the admin. Ordered school by school (so each
 // school's pile prints together) or by event (?sort=event). ?school=<name> prints one school only.
+// Relay certificates in one printable PDF, relay by relay (boys, then girls), teams in finishing order, swimmers by leg.
+// ?kind=merit: swimmers of 1st-3rd teams · participation: every swimmer of a team that swam (timed or DQ) · all: both.
+app.get('/api/admin/relay-certificates.pdf',requireAdmin,async(req,res)=>{
+  const kind=['merit','participation'].includes(req.query.kind)?req.query.kind:'all';
+  const results=new Map((await eventResults({withIds:true})).filter(e=>isRelayKey(e.event_key)).map(e=>[e.event_key,e]));
+  const relayOrder=k=>{const i=COMBINED_RELAYS.indexOf(k);return i<0?99:i};
+  const teams=(await relayTeams()).filter(t=>results.has(t.event_key)).sort((a,b)=>relayOrder(a.event_key)-relayOrder(b.event_key)||a.event_key.localeCompare(b.event_key));
+  const rankOf=t=>{const ids=t.members.map(m=>m.registration_id).sort().join();return results.get(t.event_key).standings.find(s=>[...(s.registration_ids||[])].sort().join()===ids)?.rank};
+  const merit=[],participation=[];
+  for(const t of teams.map(t=>({t,rank:rankOf(t)})).sort((a,b)=>relayOrder(a.t.event_key)-relayOrder(b.t.event_key)||(a.rank??999)-(b.rank??999)||a.t.team_name.localeCompare(b.t.team_name)).map(x=>({...x.t,rank:x.rank}))){
+    const meta=results.get(t.event_key).meta,base={category:meta.category,event:meta.label};
+    for(const m of [...t.members].sort((a,b)=>a.leg-b.leg)){
+      const p={...base,fullName:m.full_name,schoolName:String(m.school_name||'').trim()};
+      if(t.rank>=1&&t.rank<=3)merit.push({...p,kind:'merit',position:t.rank});
+      if(t.status==='DQ'||t.rank!=null)participation.push({...p,kind:'participation'});
+    }
+  }
+  const list=kind==='merit'?merit:kind==='participation'?participation:[...merit,...participation];
+  if(!list.length)return res.status(404).json({error:kind==='merit'?'No relay merit certificates yet: no relay team has a time.':'No relay certificates yet: no relay team has a time.'});
+  const pdf=await certificatesBook(list,{title:`Relay Certificates — ${list.length} certificates`});
+  await audit('export','relay-certificates',null,{kind,count:list.length},req.session.operator);
+  const stamp=new Date().toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'});
+  res.set('Content-Type','application/pdf');res.set('Content-Disposition',`attachment; filename="bsf-relay-${kind==='all'?'':kind+'-'}certificates-${stamp}.pdf"`);
+  res.set('X-Certificate-Count',String(list.length));
+  res.send(pdf);
+});
 app.get('/api/admin/merit-certificates.pdf',requireAdmin,async(req,res)=>{
   const sort=req.query.sort==='event'?'event':'school',onlySchool=req.query.school?schoolKey(req.query.school):null;
   const medals=await medalsByRegistration();

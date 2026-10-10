@@ -359,6 +359,12 @@ test('admin end-to-end API regression',async t=>{
   const lateCert=await fetch(base+lateTicket.meritCertificates[0].url);assert.equal(lateCert.status,200);assert.equal(lateCert.headers.get('content-type'),'application/pdf');
   const lateDetails=await api('/api/admin/registrations/'+late[0]);assert.equal(lateDetails.status,200);
   assert.equal((await fetch(base+'/api/admin/registrations.csv',{headers:{cookie}})).status,200);
+  // Relay certificates book: 3 placed teams x 4 swimmers merit pages; participation for every team that swam (C has no time yet).
+  const book=async kind=>{const r=await fetch(base+'/api/admin/relay-certificates.pdf'+(kind?'?kind='+kind:''),{headers:{cookie}});return {status:r.status,type:r.headers.get('content-type'),count:Number(r.headers.get('x-certificate-count')),bytes:(await r.arrayBuffer()).byteLength}};
+  const meritBook=await book('merit');assert.equal(meritBook.status,200);assert.equal(meritBook.type,'application/pdf');assert.equal(meritBook.count,12);
+  assert.equal((await book('participation')).count,12);assert.equal((await book()).count,24);
+  assert.ok(meritBook.bytes<2_000_000,'designs and fonts embedded once: '+meritBook.bytes);
+  assert.equal((await fetch(base+'/api/admin/relay-certificates.pdf')).status,401);
   assert.equal((await fetch(base+'/api/admin/relays/'+L.body.id,{method:'DELETE',headers:{cookie}})).status,200);
   const edited=await team('Relay School C2',[ids[6],ids[7],ids[10],ids[11]],{id:C.body.id,heatNo:2,laneNo:1});assert.equal(edited.status,200);
   assert.equal((await api('/api/admin/relays?eventKey='+encodeURIComponent(key))).body.teams.find(t=>String(t.id)===String(C.body.id)).team_name,'Relay School C2');
