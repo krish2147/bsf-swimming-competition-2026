@@ -37,7 +37,7 @@ contact BSF customer care, and `POST /api/ticket-recovery` answers `410 TICKET_D
 | Variable | Effect |
 | --- | --- |
 | `TICKET_DESK=open` | Reopens ticket and certificate recovery (set it for next year's meet). |
-| `SUPPORT_PHONE` | Shown on the closed page as a `Call customer care` button. |
+| `SUPPORT_PHONE` | The `Call customer care` button on the closed page. Defaults to BSF customer care, `+91 93132 41071`. |
 | `SUPPORT_EMAIL` | Shown as an email button. |
 | `SUPPORT_WHATSAPP_URL` | Overrides the WhatsApp group link used by the `Message BSF on WhatsApp` button. |
 

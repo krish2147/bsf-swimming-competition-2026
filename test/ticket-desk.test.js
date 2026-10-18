@@ -21,6 +21,7 @@ test('the ticket desk closes without taking the rest of the site down',async t=>
   assert.equal(body.code,'TICKET_DESK_CLOSED');
   assert.match(body.error,/BSF customer care/);
   assert.ok(body.support.whatsappUrl);
+  assert.equal(body.support.phone,'+91 93132 41071');
  });
 
  await t.test('the config says the ticket desk is closed',async()=>{

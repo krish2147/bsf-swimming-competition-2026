@@ -47,7 +47,7 @@ app.use(session({
 const ticketDeskOpen=()=>String(process.env.TICKET_DESK||'').toLowerCase()==='open';
 const TICKET_DESK_CLOSED_MESSAGE='Find My Ticket is closed now that the competition has finished. For your ticket or certificate, please contact BSF customer care.';
 const supportContact=()=>({
-  phone:process.env.SUPPORT_PHONE||'',
+  phone:process.env.SUPPORT_PHONE||'+91 93132 41071', // BSF customer care
   email:process.env.SUPPORT_EMAIL||'',
   whatsappUrl:process.env.SUPPORT_WHATSAPP_URL||'https://chat.whatsapp.com/KjaH2HlIPVzIQ8riESfEKo?s=cl&p=a&mlu=4&ilr=4'
 });
