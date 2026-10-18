@@ -5,7 +5,6 @@ const multer=require('multer');
 const QRCode=require('qrcode');
 const {v4:uuidv4}=require('uuid');
 const path=require('path');
-const fs=require('fs');
 const crypto=require('crypto');
 const {pool,initDb,withTransaction}=require('./src/db');
 const {CATEGORIES,categoryForDob,eventKey,parseEventKey}=require('./src/competition');
@@ -42,26 +41,15 @@ app.use(session({
   saveUninitialized:false,
   cookie:{httpOnly:true,sameSite:'lax',secure:process.env.NODE_ENV==='production',maxAge:43200000}
 }));
-// Results-only mode (the 2026 meet is over): the public site shows only Best Swimmers, Results and Timings.
-// Registration, events, tickets and certificates are switched off - pages go to Best Swimmers and their APIs
-// answer 410. The admin desk keeps working. Set PUBLIC_SITE=full to reopen everything (e.g. for next year).
-const resultsOnly=()=>{
-  const mode=String(process.env.PUBLIC_SITE||'').toLowerCase();
-  return mode?mode!=='full':process.env.NODE_ENV!=='test';
-};
-const RESULTS_ONLY_CLOSED_PAGES=new Set(['/','/index.html','/events.html','/register.html','/find-ticket.html','/success.html']);
-const RESULTS_ONLY_PAGES=new Set(['/best-swimmers.html','/results.html','/timings.html']);
-const RESULTS_ONLY_CLOSED_API=/^\/api\/(register|ticket-recovery|ticket\/|wallet\/|certificate\/|merit-certificate\/)/;
-app.use((req,res,next)=>{
-  if(!resultsOnly())return next();
-  if(RESULTS_ONLY_CLOSED_API.test(req.path))return res.status(410).json({error:'This is closed now that the competition has finished. See Best Swimmers, Results and Timings.',code:'RESULTS_ONLY'});
-  if((req.method==='GET'||req.method==='HEAD')&&RESULTS_ONLY_CLOSED_PAGES.has(req.path))return res.redirect(302,'/best-swimmers.html');
-  // Mark the three public pages so their menu shows only Best Swimmers, Results and Timings.
-  if(req.method==='GET'&&RESULTS_ONLY_PAGES.has(req.path)){
-    const html=fs.readFileSync(path.join(__dirname,'public',req.path),'utf8').replace('<html','<html data-results-only="true"');
-    return res.type('html').set('Cache-Control','no-cache').send(html);
-  }
-  next();
+// The 2026 meet is over, so the ticket desk is closed: Find My Ticket no longer looks up registrations and tells
+// parents to contact BSF customer care instead. The rest of the public site (home, events, results, best swimmers,
+// timings) and the admin desk are unchanged. Set TICKET_DESK=open to reopen recovery (e.g. for next year).
+const ticketDeskOpen=()=>String(process.env.TICKET_DESK||'').toLowerCase()==='open';
+const TICKET_DESK_CLOSED_MESSAGE='Find My Ticket is closed now that the competition has finished. For your ticket or certificate, please contact BSF customer care.';
+const supportContact=()=>({
+  phone:process.env.SUPPORT_PHONE||'+91 93132 41071', // BSF customer care
+  email:process.env.SUPPORT_EMAIL||'',
+  whatsappUrl:process.env.SUPPORT_WHATSAPP_URL||'https://chat.whatsapp.com/KjaH2HlIPVzIQ8riESfEKo?s=cl&p=a&mlu=4&ilr=4'
 });
 app.use(express.static(path.join(__dirname,'public')));
 // Self-hosted QR decoder for the check-in camera scanner (works without CDN access at the venue).
@@ -114,7 +102,8 @@ const registrationOpen=()=>tournamentOpen()&&Date.now()<registrationClosesAt().g
 const REGISTRATION_CLOSED_MESSAGE='Registration for the competition is now closed. If you already registered, use Find My Ticket to get your ticket.';
 
 app.get('/api/config',(req,res)=>res.json({
-  resultsOnly:resultsOnly(),
+  ticketRecoveryOpen:ticketDeskOpen(),
+  support:supportContact(),
   registrationOpen:registrationOpen(),
   tournamentClosed:!tournamentOpen(),
   // A logged-in admin can still add late entries through the normal form after registration closes (not after the competition).
@@ -241,6 +230,7 @@ app.get('/api/certificate/:token',async(req,res)=>{
 
 app.post('/api/ticket-recovery',async(req,res)=>{
   res.set('Cache-Control','no-store');
+  if(!ticketDeskOpen())return res.status(410).json({error:TICKET_DESK_CLOSED_MESSAGE,code:'TICKET_DESK_CLOSED',support:supportContact()});
   try{
     const phone=typeof req.body?.phone==='string'?req.body.phone.trim():'',dob=typeof req.body?.dob==='string'?req.body.dob.trim():'';
     const digits=value=>String(value||'').replace(/\D/g,'');

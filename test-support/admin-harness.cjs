@@ -8,6 +8,8 @@ process.env.NODE_ENV='test';
 process.env.REGISTRATION_CLOSES_AT||='2100-01-01T00:00:00+05:30';
 process.env.PUBLIC_RESULTS||='open';
 process.env.TOURNAMENT||='open';
+// Ticket recovery is closed on the live site now the meet is over; tests that check that override this.
+process.env.TICKET_DESK||='open';
 const db=require('../src/db');
 const pg=new PGlite();
 async function query(sql,values=[]){
