@@ -7,7 +7,10 @@
   if(!nav)return;
   if(!document.querySelector('link[href="/mobile-nav.css"]')){const css=document.createElement('link');css.rel='stylesheet';css.href='/mobile-nav.css';document.head.append(css)}
   const here=location.pathname.replace(/\/index\.html$/,'/');
-  const pages=here.startsWith('/admin/')?ADMIN:PUBLIC;
+  // While the site is in results-only mode the public menu is just these three pages (see server.js).
+  const RESULTS_ONLY=[['/best-swimmers.html','Best Swimmers'],['/results.html','Results'],['/timings.html','Timings']];
+  const resultsOnly=document.documentElement.dataset.resultsOnly==='true'||window.BSF_RESULTS_ONLY===true;
+  const pages=here.startsWith('/admin/')?ADMIN:(resultsOnly?RESULTS_ONLY:PUBLIC);
   const esc=v=>String(v).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const brand=nav.querySelector('.brand')?.outerHTML||'<a class="brand" href="/">AARK × BSF <small>/ SWIMMING</small></a>';
   const links=pages.map(([href,label,also=[]])=>{const current=href===here||also.includes(here);
