@@ -1,7 +1,7 @@
 # Free, always-on results website (no server, no database): Render → New → Blueprint → this repo.
 services:
   - type: web
-    name: talent-dream-results
+    name: bsf-3rd-interschool
     runtime: static
     branch: main
     buildCommand: ""
