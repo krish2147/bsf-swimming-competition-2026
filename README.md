@@ -28,6 +28,19 @@ Admin: `/admin/`
 
 Default development PIN: `2468` — change it before launch.
 
+## After the competition
+
+The whole public site stays up once the meet is over — only the ticket desk closes.
+`Find My Ticket` keeps its page and menu entry, but the lookup form is replaced with a note asking parents to
+contact BSF customer care, and `POST /api/ticket-recovery` answers `410 TICKET_DESK_CLOSED`.
+
+| Variable | Effect |
+| --- | --- |
+| `TICKET_DESK=open` | Reopens ticket and certificate recovery (set it for next year's meet). |
+| `SUPPORT_PHONE` | Shown on the closed page as a `Call customer care` button. |
+| `SUPPORT_EMAIL` | Shown as an email button. |
+| `SUPPORT_WHATSAPP_URL` | Overrides the WhatsApp group link used by the `Message BSF on WhatsApp` button. |
+
 ## Before production launch
 
 1. Replace payment QR/UPI placeholders.

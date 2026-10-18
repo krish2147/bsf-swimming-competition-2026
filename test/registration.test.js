@@ -4,7 +4,6 @@ const {PGlite}=require('@electric-sql/pglite');
 const {prepareValue}=require('pg/lib/utils');
 process.env.DATABASE_URL='postgres://unused:unused@localhost/unused';
 process.env.ADMIN_PIN='test-pin';
-process.env.PUBLIC_SITE='full'; // these tests exercise registration, which results-only mode switches off
 process.env.TOURNAMENT||='open';
 process.env.SESSION_SECRET='test-only-session-secret';
 process.env.REGISTRATION_EVENTS_DEBUG='true';

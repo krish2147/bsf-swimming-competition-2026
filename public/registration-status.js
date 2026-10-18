@@ -6,12 +6,14 @@
     return {label:last.toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',day:'numeric',month:'long',year:'numeric'}),iso:last.toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'})};
   };
   window.BSFRegistrationStatus=fetch('/api/config').then(r=>r.ok?r.json():null).then(config=>{
-    if(!config||!config.registrationClosesAt||config.resultsOnly)return config; // results-only: no registration notices or popups
+    if(!config||!config.registrationClosesAt)return config;
     const day=lastDay(config.registrationClosesAt);
     for(const notice of document.querySelectorAll('.registration-deadline')){
       const extended=notice.querySelector('.registration-extended');notice.replaceChildren();
       const strong=document.createElement('strong'),time=document.createElement('time');time.dateTime=day.iso;time.textContent=day.label;
-      if(config.tournamentClosed&&!config.lateEntry){notice.classList.add('registration-closed');strong.textContent='The competition has concluded.';notice.append(strong,' Thank you to every swimmer, parent and school! ');const link=document.createElement('a');link.href='/find-ticket.html';link.textContent='Download your participation certificate';notice.append(link,'.')}
+      if(config.tournamentClosed&&!config.lateEntry){notice.classList.add('registration-closed');strong.textContent='The competition has concluded.';notice.append(strong,' Thank you to every swimmer, parent and school! ');
+        if(config.ticketRecoveryOpen){const link=document.createElement('a');link.href='/find-ticket.html';link.textContent='Download your participation certificate';notice.append(link,'.')}
+        else notice.append('For your ticket or certificate, please contact BSF customer care.')}
       else if(config.lateEntry){notice.classList.add('registration-late-entry');strong.textContent='Admin late entry:';notice.append(strong,' registration closed to the public on ',time,'. Entries you submit here are accepted and recorded in the audit log.')}
       else if(config.registrationOpen){strong.textContent='Registration Deadline:';if(extended)notice.append(extended,' ');notice.append(strong,' ',time)}
       else{notice.classList.add('registration-closed');strong.textContent='Registration closed';notice.append(strong,' on ',time,'. Already registered? ');const link=document.createElement('a');link.href='/find-ticket.html';link.textContent='Find My Ticket';notice.append(link,'.')}
