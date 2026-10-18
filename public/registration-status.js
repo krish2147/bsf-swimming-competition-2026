@@ -6,7 +6,7 @@
     return {label:last.toLocaleDateString('en-IN',{timeZone:'Asia/Kolkata',day:'numeric',month:'long',year:'numeric'}),iso:last.toLocaleDateString('en-CA',{timeZone:'Asia/Kolkata'})};
   };
   window.BSFRegistrationStatus=fetch('/api/config').then(r=>r.ok?r.json():null).then(config=>{
-    if(!config||!config.registrationClosesAt)return config;
+    if(!config||!config.registrationClosesAt||config.resultsOnly)return config; // results-only: no registration notices or popups
     const day=lastDay(config.registrationClosesAt);
     for(const notice of document.querySelectorAll('.registration-deadline')){
       const extended=notice.querySelector('.registration-extended');notice.replaceChildren();
