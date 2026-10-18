@@ -10,3 +10,5 @@ competition.db-wal
 *.db-wal
 
 .DS_Store
+# Local backups made by scripts/full-backup.mjs (personal data, never commit)
+talent-dream-full-backup-*/

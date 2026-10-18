@@ -1,0 +1,12 @@
+# Free, always-on results website (no server, no database): Render → New → Blueprint → this repo.
+services:
+  - type: web
+    name: talent-dream-results
+    runtime: static
+    branch: main
+    buildCommand: ""
+    staticPublishPath: ./results-site
+    headers:
+      - path: /data/*
+        name: Cache-Control
+        value: public, max-age=300
